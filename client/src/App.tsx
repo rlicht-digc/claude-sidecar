@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSidecarStore } from './store/store';
 import { Header } from './components/Header';
@@ -8,7 +8,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 
 export default function App() {
   useWebSocket();
-  const { fileTree, workingDirectory, setWorkingDirectory, setFileTree } = useSidecarStore();
+  const { fileTree, setWorkingDirectory, setFileTree } = useSidecarStore();
   const [loading, setLoading] = useState(false);
 
   const handleScan = async (path: string) => {
@@ -23,7 +23,6 @@ export default function App() {
       if (data.ok) {
         setFileTree(data.tree);
         setWorkingDirectory(data.root);
-        // Also start watching
         await fetch('http://localhost:3577/watch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -43,26 +42,9 @@ export default function App() {
       height: '100vh',
       background: '#0d1117',
       color: '#e6edf3',
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif",
     }}>
       <Header onScan={handleScan} loading={loading} />
-      {fileTree.length === 0 && !loading ? (
-        <WelcomeScreen onScan={handleScan} />
-      ) : (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <div style={{
-            width: 340,
-            borderRight: '1px solid #30363d',
-            overflow: 'auto',
-            padding: '8px 0',
-          }}>
-            <FileTree nodes={fileTree} />
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <ActivityStream />
-          </div>
-        </div>
-      )}
+      <WelcomeScreen onScan={handleScan} />
     </div>
   );
 }
