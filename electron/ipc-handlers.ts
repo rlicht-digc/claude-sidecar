@@ -43,6 +43,10 @@ export function registerIpcHandlers({ ptyManager, sessionStore }: Deps) {
     ptyManager.resize(tabId, cols, rows);
   });
 
+  ipcMain.handle('terminal:getSnapshot', async (_event, tabId: string) => {
+    return ptyManager.getSnapshot(tabId);
+  });
+
   ipcMain.handle('terminal:close', async (_event, tabId: string) => {
     const sessionId = tabSessionMap.get(tabId);
     if (sessionId) {

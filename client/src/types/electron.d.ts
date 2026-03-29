@@ -4,6 +4,7 @@ export interface TerminalSaddleAPI {
     create: (options: { cwd?: string; shell?: string }) => Promise<{ tabId: string; sessionId: string }>;
     write: (tabId: string, data: string) => void;
     resize: (tabId: string, cols: number, rows: number) => void;
+    getSnapshot: (tabId: string) => Promise<string>;
     close: (tabId: string) => Promise<void>;
     onData: (callback: (tabId: string, data: string) => void) => () => void;
     onExit: (callback: (tabId: string, exitCode: number) => void) => () => void;

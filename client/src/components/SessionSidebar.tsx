@@ -32,9 +32,8 @@ export function SessionSidebar({ onSelect }: SessionSidebarProps) {
 
   return (
     <div style={{
-      width: 180,
-      minWidth: 180,
-      borderRight: '1px solid #21262d',
+      width: '100%',
+      height: '100%',
       background: '#0d1117',
       display: 'flex',
       flexDirection: 'column',

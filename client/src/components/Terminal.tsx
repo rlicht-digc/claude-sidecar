@@ -93,6 +93,14 @@ export function Terminal({ tabId, isActive }: TerminalProps) {
       }
     });
 
+    void window.terminalSaddle.terminal.getSnapshot(tabId)
+      .then((snapshot) => {
+        if (snapshot && termRef.current) {
+          termRef.current.write(snapshot);
+        }
+      })
+      .catch(() => {});
+
     // Send initial resize
     const { cols, rows } = fitAddon.proposeDimensions() || { cols: 120, rows: 30 };
     window.terminalSaddle.terminal.resize(tabId, cols, rows);

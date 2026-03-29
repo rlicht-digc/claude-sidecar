@@ -12,6 +12,7 @@ interface HeaderProps {
 export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderProps) {
   const { connected, workingDirectory, eventCount } = useSidecarStore();
   const [scanInput, setScanInput] = useState('');
+  const isMacElectron = typeof window !== 'undefined' && window.terminalSaddle?.platform === 'darwin';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +26,15 @@ export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderP
       display: 'flex',
       alignItems: 'center',
       gap: 16,
-      padding: '10px 16px',
-      paddingLeft: 80, // clear macOS traffic lights in hiddenInset mode
+      padding: isMacElectron ? '30px 16px 10px 92px' : '10px 16px',
       borderBottom: '1px solid #30363d',
       background: '#161b22',
       flexShrink: 0,
+      minHeight: isMacElectron ? 68 : undefined,
+      boxSizing: 'border-box',
       WebkitAppRegion: 'drag', // make header draggable
 
-    }}>
+    } as any}>
       {/* Logo / Title */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 20 }}>🔭</span>

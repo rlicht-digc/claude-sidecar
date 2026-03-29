@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('terminalSaddle', {
       ipcRenderer.send('terminal:write', tabId, data),
     resize: (tabId: string, cols: number, rows: number) =>
       ipcRenderer.send('terminal:resize', tabId, cols, rows),
+    getSnapshot: (tabId: string) =>
+      ipcRenderer.invoke('terminal:getSnapshot', tabId),
     close: (tabId: string) =>
       ipcRenderer.invoke('terminal:close', tabId),
     onData: (callback: (tabId: string, data: string) => void) => {
@@ -61,9 +63,10 @@ contextBridge.exposeInMainWorld('terminalSaddle', {
 export interface TerminalSaddleAPI {
   onSidecarEvent: (callback: (event: any) => void) => () => void;
   terminal: {
-    create: (options: { cwd?: string; shell?: string }) => Promise<string>;
+    create: (options: { cwd?: string; shell?: string }) => Promise<{ tabId: string; sessionId: string }>;
     write: (tabId: string, data: string) => void;
     resize: (tabId: string, cols: number, rows: number) => void;
+    getSnapshot: (tabId: string) => Promise<string>;
     close: (tabId: string) => Promise<void>;
     onData: (callback: (tabId: string, data: string) => void) => () => void;
     onExit: (callback: (tabId: string, exitCode: number) => void) => () => void;
