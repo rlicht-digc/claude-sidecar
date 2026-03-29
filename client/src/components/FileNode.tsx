@@ -23,8 +23,8 @@ const statusColors: Record<string, string> = {
 export function FileNodeRow({ node, depth }: FileNodeRowProps) {
   const { expandedPaths, toggleExpanded, activePaths } = useSidecarStore();
   const isDir = node.type === 'directory';
-  const isExpanded = expandedPaths.has(node.path);
-  const activeEntry = activePaths.get(node.path);
+  const isExpanded = !!expandedPaths[node.path];
+  const activeEntry = activePaths[node.path];
   const isActive = !!activeEntry;
   const statusColor = activeEntry ? statusColors[activeEntry.status] || colors.muted : undefined;
 

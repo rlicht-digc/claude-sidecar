@@ -245,7 +245,7 @@ export function ClaudeFella() {
     if (walkingRef.current) {
       const speed = 0.8;
       let nextX = xRef.current + speed * dirRef.current;
-      const max = (window.innerWidth - 400) - 140; // account for sidebars
+      const max = 320 - 140; // constrained to right panel width
 
       if (nextX > max) {
         dirRef.current = -1;
@@ -340,9 +340,9 @@ export function ClaudeFella() {
 
   return (
     <div style={{
-      position: 'fixed',
+      position: 'absolute',
       bottom: 0,
-      left: 400, // offset for sidebars (180 + 220)
+      left: 0,
       right: 0,
       height: 0,
       pointerEvents: 'none',

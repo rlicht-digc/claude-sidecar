@@ -26,9 +26,12 @@ export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderP
       alignItems: 'center',
       gap: 16,
       padding: '10px 16px',
+      paddingLeft: 80, // clear macOS traffic lights in hiddenInset mode
       borderBottom: '1px solid #30363d',
       background: '#161b22',
       flexShrink: 0,
+      WebkitAppRegion: 'drag', // make header draggable
+
     }}>
       {/* Logo / Title */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -58,7 +61,7 @@ export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderP
       </div>
 
       {/* Scan Input */}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, WebkitAppRegion: 'no-drag' } as any}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -117,7 +120,8 @@ export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderP
           alignItems: 'center',
           padding: 4,
           borderRadius: 4,
-        }}
+          WebkitAppRegion: 'no-drag',
+        } as any}
       >
         {soundEnabled ? <VscUnmute style={{ fontSize: 16 }} /> : <VscMute style={{ fontSize: 16 }} />}
       </button>

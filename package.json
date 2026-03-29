@@ -1,8 +1,9 @@
 {
-  "name": "claude-sidecar",
-  "version": "0.1.0",
-  "description": "Real-time visual companion for Claude Code terminal sessions",
+  "name": "terminal-saddle",
+  "version": "0.2.0",
+  "description": "Terminal saddle — visual companion that wraps around your AI terminal sessions",
   "private": true,
+  "main": "dist-electron/main.js",
   "workspaces": [
     "server",
     "client"
@@ -11,20 +12,55 @@
     "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "setup-hooks": "bash scripts/setup-hooks.sh"
+    "setup-hooks": "bash scripts/setup-hooks.sh",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && concurrently -k -n vite,electron -c green,blue \"npm run dev -w client\" \"sleep 2 && electron .\"",
+    "electron:build": "npm run build -w client && npm run electron:compile && electron-builder",
+    "electron:rebuild": "npx @electron/rebuild"
   },
   "devDependencies": {
-    "concurrently": "^8.2.0"
+    "concurrently": "^8.2.0",
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.0",
+    "@electron/rebuild": "^3.6.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/ws": "^8.5.10",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "ws": "^8.16.0",
+    "chokidar": "^3.6.0"
+  },
+  "build": {
+    "appId": "com.terminalsaddle.app",
+    "productName": "Terminal Saddle",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "client/dist/**/*",
+      "scripts/**/*"
+    ],
+    "extraResources": [
+      "scripts/"
+    ]
   },
   "keywords": [
     "claude",
     "claude-code",
+    "terminal",
     "sidecar",
     "developer-tools",
     "visualization",
     "real-time",
-    "websocket",
-    "hooks"
+    "electron"
   ],
   "author": "Russell Licht",
   "license": "MIT",

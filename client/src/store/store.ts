@@ -30,11 +30,11 @@ interface SidecarStore {
   eventCount: number;
 
   // Expanded directories
-  expandedPaths: Set<string>;
+  expandedPaths: Record<string, boolean>;
   toggleExpanded: (path: string) => void;
 
   // Active (highlighted) file paths
-  activePaths: Map<string, { status: string; timestamp: number }>;
+  activePaths: Record<string, { status: string; timestamp: number }>;
 
   // Hover info for character speech
   hoverInfo: HoverInfo | null;
@@ -104,19 +104,19 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
 
   eventCount: 0,
 
-  expandedPaths: new Set<string>(),
+  expandedPaths: {},
   toggleExpanded: (path) =>
     set((state) => {
-      const next = new Set(state.expandedPaths);
-      if (next.has(path)) {
-        next.delete(path);
+      const next = { ...state.expandedPaths };
+      if (next[path]) {
+        delete next[path];
       } else {
-        next.add(path);
+        next[path] = true;
       }
       return { expandedPaths: next };
     }),
 
-  activePaths: new Map(),
+  activePaths: {},
 
   hoverInfo: null,
   setHoverInfo: (info) => set({ hoverInfo: info }),
@@ -138,21 +138,21 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
     const filePath = event.data?.path;
 
     set((state) => {
-      const newActivePaths = new Map(state.activePaths);
+      const newActivePaths = { ...state.activePaths };
 
       if (filePath) {
-        newActivePaths.set(filePath, {
+        newActivePaths[filePath] = {
           status: getStatusForEvent(event.type),
           timestamp: Date.now(),
-        });
+        };
 
         // Auto-clear after 3 seconds
         setTimeout(() => {
           set((s) => {
-            const paths = new Map(s.activePaths);
-            const entry = paths.get(filePath);
+            const entry = s.activePaths[filePath];
             if (entry && Date.now() - entry.timestamp >= 2800) {
-              paths.delete(filePath);
+              const paths = { ...s.activePaths };
+              delete paths[filePath];
               return { activePaths: paths };
             }
             return {};
@@ -161,14 +161,14 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
       }
 
       // Auto-expand parent directories when a file is touched
-      const newExpanded = new Set(state.expandedPaths);
+      const newExpanded = { ...state.expandedPaths };
       if (filePath && state.workingDirectory) {
         const rel = filePath.replace(state.workingDirectory + '/', '');
         const parts = rel.split('/');
         let current = state.workingDirectory;
         for (let i = 0; i < parts.length - 1; i++) {
           current += '/' + parts[i];
-          newExpanded.add(current);
+          newExpanded[current] = true;
         }
       }
 

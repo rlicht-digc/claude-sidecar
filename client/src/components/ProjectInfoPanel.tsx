@@ -108,7 +108,7 @@ function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number 
   const [expanded, setExpanded] = useState(false);
   const activePaths = useSidecarStore((s) => s.activePaths);
   const setHoverInfo = useSidecarStore((s) => s.setHoverInfo);
-  const activeEntry = activePaths.get(node.path);
+  const activeEntry = activePaths[node.path];
 
   const statusColors: Record<string, string> = {
     reading: '#58a6ff',
