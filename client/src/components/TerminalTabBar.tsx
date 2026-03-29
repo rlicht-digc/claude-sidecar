@@ -5,6 +5,8 @@ export interface TabInfo {
   sessionId: string;
   label: string;
   cwd: string;
+  /** If set, this tab is an action-agent tab that gets reused */
+  actionAgent?: 'claude' | 'codex';
 }
 
 interface TerminalTabBarProps {
@@ -46,13 +48,19 @@ export function TerminalTabBar({ tabs, activeTabId, onSelectTab, onNewTab, onClo
               fontWeight: isActive ? 600 : 400,
               color: isActive ? '#e6edf3' : '#7d8590',
               background: isActive ? '#0d1117' : 'transparent',
-              borderTop: isActive ? '2px solid #58a6ff' : '2px solid transparent',
+              borderTop: isActive
+                ? `2px solid ${tab.actionAgent === 'claude' ? '#da7756' : tab.actionAgent === 'codex' ? '#58a6ff' : '#58a6ff'}`
+                : '2px solid transparent',
               transition: 'all 0.15s ease',
               maxWidth: 200,
               flexShrink: 0,
             }}
           >
-            <VscTerminalBash size={14} style={{ flexShrink: 0 }} />
+            {tab.actionAgent ? (
+              <span style={{ fontSize: 11, flexShrink: 0 }}>{tab.actionAgent === 'claude' ? '✦' : '◈'}</span>
+            ) : (
+              <VscTerminalBash size={14} style={{ flexShrink: 0 }} />
+            )}
             <span style={{
               overflow: 'hidden',
               textOverflow: 'ellipsis',

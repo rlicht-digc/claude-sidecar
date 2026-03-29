@@ -1,137 +1,190 @@
-export interface ActionDef {
-  id: string;
+export type ActionScope = 'current' | 'repo' | 'system';
+
+export interface ActionVariant {
+  scope: ActionScope;
   label: string;
-  icon: string;       // emoji for now, Lottie later
-  category: 'audit' | 'research' | 'dev' | 'analysis';
   description: string;
   prompts: {
     claude: string;
-    codex: string;     // Codex writes these via mailbox handoff — placeholders for now
+    codex: string;
   };
-  /** If true, prompt includes {{cwd}} which is replaced at runtime */
-  usesCwd: boolean;
 }
 
-/**
- * CLI launch commands per agent type.
- * {{prompt}} is replaced with the full prompt text.
- * {{cwd}} is replaced with the active working directory.
- */
+export interface ActionDef {
+  id: string;
+  label: string;
+  icon: string;
+  category: 'audit' | 'research' | 'dev' | 'analysis';
+  /** If true, show scope sub-menu (Current Window / Repo / System) */
+  hasScopes: boolean;
+  /** Variants per scope. If hasScopes=false, only 'repo' is used. */
+  variants: Partial<Record<ActionScope, ActionVariant>>;
+}
+
 export const CLI_COMMANDS = {
-  claude: `cd "{{cwd}}" && claude --dangerously-skip-permissions -p "{{prompt}}"`,
-  codex: `cd "{{cwd}}" && codex --full-auto "{{prompt}}"`,
+  claude: `claude --dangerously-skip-permissions -p "{{prompt}}"`,
+  codex: `codex --full-auto "{{prompt}}"`,
 } as const;
 
 export type AgentCLI = keyof typeof CLI_COMMANDS;
 
+/** For "current terminal" scope, just the raw prompt (no CLI wrapper) */
+export function buildCurrentTerminalPrompt(variant: ActionVariant): string {
+  // For injecting into an already-running Claude/Codex session,
+  // we just type the prompt text directly
+  return variant.prompts.claude
+    .replace(/<\/?context>/g, '')
+    .replace(/<\/?instructions>/g, '')
+    .replace(/\{\{cwd\}\}/g, '.')
+    .trim();
+}
+
+export function buildCommand(variant: ActionVariant, agent: AgentCLI, cwd: string): string {
+  let prompt = variant.prompts[agent];
+  prompt = prompt.replace(/\{\{cwd\}\}/g, cwd);
+  const escaped = prompt.replace(/'/g, "'\\''");
+  return `cd "${cwd}" && ${CLI_COMMANDS[agent].replace('{{prompt}}', escaped)}`;
+}
+
 export const ACTIONS: ActionDef[] = [
   {
-    id: 'repo-audit',
-    label: 'Repo Audit',
+    id: 'audit',
+    label: 'Audit',
     icon: '🔍',
     category: 'audit',
-    description: 'Comprehensive audit of the current repository',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+    hasScopes: true,
+    variants: {
+      current: {
+        scope: 'current',
+        label: 'Audit Current Window',
+        description: 'Audit what you\'re working on in this terminal',
+        prompts: {
+          claude: `Review the recent work in this terminal session. Identify any issues, potential bugs, or improvements in the code that was just modified or discussed. Focus on what's actively being worked on right now.`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
+      repo: {
+        scope: 'repo',
+        label: 'Repo Audit',
+        description: 'Full audit of the current repository',
+        prompts: {
+          claude: `<context>
 You are auditing the repository at {{cwd}}.
 </context>
 
 <instructions>
-Perform a comprehensive repository audit. Cover:
+Perform a comprehensive repository audit:
 
-1. **Structure & Organization** — Is the project well-organized? Are there misplaced files, dead code, or orphaned modules?
-2. **Code Quality** — Identify code smells, duplicated logic, overly complex functions, and missing error handling.
-3. **Security** — Check for hardcoded secrets, exposed credentials, insecure dependencies, injection vulnerabilities.
-4. **Dependencies** — Are there outdated, unused, or vulnerable packages? Run a dependency health check.
-5. **Documentation** — Is there adequate documentation? Are READMEs, inline comments, and API docs sufficient?
-6. **Testing** — What is the test coverage situation? Are there critical paths without tests?
-7. **Configuration** — Check for environment variable hygiene, config file consistency, build pipeline health.
+1. **Structure & Organization** — Misplaced files, dead code, orphaned modules
+2. **Code Quality** — Code smells, duplication, complexity, missing error handling
+3. **Security** — Hardcoded secrets, insecure deps, injection vulnerabilities
+4. **Dependencies** — Outdated, unused, or vulnerable packages
+5. **Documentation** — Adequacy of READMEs, comments, API docs
+6. **Testing** — Coverage gaps, critical paths without tests
+7. **Configuration** — Env var hygiene, config consistency, build pipeline
 
-Output a structured report with severity ratings (critical/high/medium/low) for each finding.
-At the end, provide a prioritized action list of the top 10 things to fix.
+Output severity-rated findings (critical/high/medium/low) and a prioritized top 10 action list.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write repo audit prompt via mailbox M0004`,
-    },
-  },
-  {
-    id: 'system-audit',
-    label: 'System Audit',
-    icon: '🖥️',
-    category: 'audit',
-    description: 'System-wide health check across all projects',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
+      system: {
+        scope: 'system',
+        label: 'System Audit',
+        description: 'System-wide health check',
+        prompts: {
+          claude: `<context>
 Working directory: {{cwd}}
 </context>
 
 <instructions>
-Perform a system-level diagnostic audit:
+Perform a system-level diagnostic:
 
-1. **Disk & Storage** — Check disk usage, large files, stale caches (node_modules, __pycache__, .cache, Docker images).
-2. **Git Health** — Scan for uncommitted changes across repos, stale branches, diverged remotes.
-3. **Running Processes** — Identify orphaned servers, zombie processes, port conflicts.
-4. **Environment** — Verify key tools are installed and up to date (node, python, docker, git, claude, codex).
-5. **Secrets & Credentials** — Scan for exposed .env files, API keys in git history, expired tokens.
-6. **Resource Usage** — Current memory, CPU, and network usage. Flag anything abnormal.
+1. **Disk & Storage** — Usage, large files, stale caches
+2. **Git Health** — Uncommitted changes across repos, stale branches
+3. **Running Processes** — Orphaned servers, port conflicts
+4. **Environment** — Tool versions (node, python, docker, git, claude, codex)
+5. **Secrets** — Exposed .env files, API keys in git history
+6. **Resources** — Memory, CPU, network usage
 
-Output a health report with pass/warn/fail for each category and specific remediation steps.
+Output pass/warn/fail per category with remediation steps.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write system audit prompt via mailbox M0004`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
     },
   },
   {
-    id: 'deep-research',
-    label: 'Deep Research',
+    id: 'research',
+    label: 'Research',
     icon: '📚',
     category: 'research',
-    description: 'Research a topic in depth with web search and analysis',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+    hasScopes: true,
+    variants: {
+      current: {
+        scope: 'current',
+        label: 'Research This',
+        description: 'Deep research on what you\'re currently working on',
+        prompts: {
+          claude: `Look at what I'm currently working on in this terminal and research it in depth. Find the latest best practices, competing approaches, relevant libraries, and actionable improvements. Output a structured brief with links.`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
+      repo: {
+        scope: 'repo',
+        label: 'Research Project',
+        description: 'Research the project\'s domain and tech stack',
+        prompts: {
+          claude: `<context>
 Working directory: {{cwd}}
-Research the primary topic of this project by examining the codebase, README, and recent git history.
 </context>
 
 <instructions>
-Conduct deep research relevant to this project:
+Research this project's domain:
 
-1. **Identify the topic** — Read the README, package.json/pyproject.toml, and recent commits to understand what this project does.
-2. **Research current state of the art** — Search the web for the latest developments, best practices, and competing approaches in this domain.
-3. **Find relevant libraries and tools** — Identify packages, frameworks, or services that could improve the project.
-4. **Analyze gaps** — Compare the project's current approach against industry best practices. What's missing?
-5. **Compile findings** — Write a structured research brief with citations and links.
+1. **Identify the topic** — Read README, package.json, recent commits
+2. **State of the art** — Latest developments, best practices, competing approaches
+3. **Libraries & tools** — Packages/services that could improve the project
+4. **Gap analysis** — Compare current approach against industry best practices
+5. **Compile** — Structured markdown research brief with citations and links
 
-Output the research as a markdown document with sections, links, and actionable recommendations.
+Output actionable recommendations.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write deep research prompt via mailbox M0004`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
     },
   },
   {
-    id: 'run-tests',
+    id: 'test',
     label: 'Run Tests',
     icon: '🧪',
     category: 'dev',
-    description: 'Discover and run the test suite, report results',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+    hasScopes: false,
+    variants: {
+      repo: {
+        scope: 'repo',
+        label: 'Run Tests',
+        description: 'Discover and run the test suite',
+        prompts: {
+          claude: `<context>
 Working directory: {{cwd}}
 </context>
 
 <instructions>
 Find and run the project's test suite:
 
-1. **Discover** — Identify the test framework (jest, pytest, vitest, mocha, cargo test, go test, etc.) by reading package.json, pyproject.toml, Makefile, or CI config.
-2. **Run** — Execute the test suite with verbose output.
-3. **Analyze** — If there are failures, read the failing test and the code under test. Diagnose root causes.
-4. **Fix** — For each failing test, determine if it's a test bug or a code bug and fix accordingly.
-5. **Report** — Summarize: total tests, passed, failed, skipped. List any fixes applied.
+1. **Discover** — Identify framework from package.json, pyproject.toml, Makefile, CI config
+2. **Run** — Execute with verbose output
+3. **Analyze** — Diagnose any failures (test bug or code bug?)
+4. **Fix** — Apply fixes for failures
+5. **Report** — Total/passed/failed/skipped + fixes applied
 
-If no test suite exists, say so and suggest what should be tested first.
+If no tests exist, suggest what should be tested first.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write test runner prompt via mailbox M0004`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
     },
   },
   {
@@ -139,64 +192,63 @@ If no test suite exists, say so and suggest what should be tested first.
     label: 'Refactor',
     icon: '♻️',
     category: 'dev',
-    description: 'Identify and execute safe refactoring opportunities',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+    hasScopes: false,
+    variants: {
+      repo: {
+        scope: 'repo',
+        label: 'Refactor',
+        description: 'Safe refactoring opportunities',
+        prompts: {
+          claude: `<context>
 Working directory: {{cwd}}
 </context>
 
 <instructions>
-Identify and execute safe refactoring opportunities in this project:
+Identify and execute safe refactoring:
 
-1. **Scan** — Read the main source files and identify: duplicated code, overly long functions, poor naming, inconsistent patterns, dead code.
-2. **Prioritize** — Rank opportunities by impact and safety. Prefer changes that reduce complexity without changing behavior.
-3. **Execute** — Apply the top 3-5 safest, highest-impact refactors. Each refactor should be a small, reviewable change.
-4. **Verify** — Run tests after each change (if tests exist) to confirm nothing broke.
-5. **Report** — List what you changed and why, with before/after comparisons.
+1. **Scan** — Duplicated code, long functions, poor naming, dead code
+2. **Prioritize** — Rank by impact and safety
+3. **Execute** — Apply top 3-5 safest refactors
+4. **Verify** — Run tests after each change
+5. **Report** — What changed and why, before/after
 
-Do NOT change public APIs, add new features, or modify behavior. Pure structural improvements only.
+No API changes, no new features, no behavior changes. Structure only.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write refactor prompt via mailbox M0004`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
     },
   },
   {
-    id: 'doc-gen',
+    id: 'document',
     label: 'Document',
     icon: '📝',
     category: 'dev',
-    description: 'Generate or update project documentation',
-    usesCwd: true,
-    prompts: {
-      claude: `<context>
+    hasScopes: false,
+    variants: {
+      repo: {
+        scope: 'repo',
+        label: 'Generate Docs',
+        description: 'Review and improve documentation',
+        prompts: {
+          claude: `<context>
 Working directory: {{cwd}}
 </context>
 
 <instructions>
-Review and improve this project's documentation:
+Review and improve documentation:
 
-1. **Inventory** — List all existing docs (README, inline comments, API docs, changelogs, guides).
-2. **Gap analysis** — What's missing? What's outdated? What's confusing?
-3. **README** — If the README is missing or sparse, write a comprehensive one covering: what the project does, setup instructions, usage examples, architecture overview.
-4. **Code comments** — Add JSDoc/docstrings to public functions and complex logic that lacks explanation.
-5. **Architecture** — If the project has multiple components, create a brief architecture doc explaining how they connect.
+1. **Inventory** — Existing READMEs, comments, API docs, changelogs
+2. **Gap analysis** — What's missing, outdated, confusing?
+3. **README** — Write/update comprehensive README
+4. **Code comments** — Add JSDoc/docstrings where genuinely needed
+5. **Architecture** — Brief architecture doc if multi-component
 
-Only add documentation where genuinely needed. Don't over-document simple code.
+Only add docs where needed. Don't over-document simple code.
 </instructions>`,
-      codex: `PLACEHOLDER: Codex to write doc-gen prompt via mailbox M0004`,
+          codex: `PLACEHOLDER: Codex to write via mailbox`,
+        },
+      },
     },
   },
 ];
-
-/** Build the full CLI command for a given action + agent */
-export function buildCommand(action: ActionDef, agent: AgentCLI, cwd: string): string {
-  let prompt = action.prompts[agent];
-  if (action.usesCwd) {
-    prompt = prompt.replace(/\{\{cwd\}\}/g, cwd);
-  }
-  // Escape single quotes in the prompt for shell safety
-  const escaped = prompt.replace(/'/g, "'\\''");
-  return CLI_COMMANDS[agent]
-    .replace('{{cwd}}', cwd)
-    .replace('{{prompt}}', escaped);
-}

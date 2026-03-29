@@ -131,27 +131,49 @@ export default function App() {
     }
   }, []);
 
-  // Launch an action: open new terminal tab, auto-type the CLI command
-  const handleLaunchAction = useCallback(async (command: string, label: string) => {
+  // Launch action in agent tab (reuse existing Claude/Codex action tab if one exists)
+  const handleLaunchAgent = useCallback(async (command: string, label: string, agent: 'claude' | 'codex') => {
     if (!window.terminalSaddle) return;
     try {
-      const cwd = workingDirectory || undefined;
-      const result = await window.terminalSaddle.terminal.create({ cwd });
-      const tabId = result.tabId;
-      const newTab: TabInfo = { id: tabId, sessionId: result.sessionId, label, cwd: cwd || '' };
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(tabId);
-      setTerminalError(null);
+      // Check for existing action tab with this agent type
+      const existingTab = tabs.find((t) => t.actionAgent === agent);
 
-      // Wait for shell to initialize, then type the command
-      setTimeout(() => {
-        window.terminalSaddle?.terminal.write(tabId, command + '\n');
-      }, 800);
+      if (existingTab) {
+        // Reuse: switch to it and type the new command
+        setActiveTabId(existingTab.id);
+        // Send Ctrl+C first to cancel any running process, then the new command
+        setTimeout(() => {
+          window.terminalSaddle?.terminal.write(existingTab.id, '\x03\n');
+          setTimeout(() => {
+            window.terminalSaddle?.terminal.write(existingTab.id, command + '\n');
+          }, 300);
+        }, 100);
+      } else {
+        // Create new action tab
+        const cwd = workingDirectory || undefined;
+        const result = await window.terminalSaddle.terminal.create({ cwd });
+        const tabId = result.tabId;
+        const newTab: TabInfo = { id: tabId, sessionId: result.sessionId, label, cwd: cwd || '', actionAgent: agent };
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(tabId);
+        setTerminalError(null);
+
+        // Wait for shell to initialize, then type the command
+        setTimeout(() => {
+          window.terminalSaddle?.terminal.write(tabId, command + '\n');
+        }, 800);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to launch action';
       setTerminalError(message);
     }
-  }, [workingDirectory]);
+  }, [workingDirectory, tabs]);
+
+  // Inject prompt into the active terminal tab (for "Current Terminal" option)
+  const handleInjectCurrent = useCallback((prompt: string) => {
+    if (!window.terminalSaddle || !activeTabId) return;
+    window.terminalSaddle.terminal.write(activeTabId, prompt + '\n');
+  }, [activeTabId]);
 
   const effectiveLeftWidth = leftCollapsed ? 0 : leftWidth;
   const effectiveRightWidth = rightCollapsed ? 0 : rightWidth;
@@ -295,7 +317,11 @@ export default function App() {
 
               {/* Action buttons (bottom half) */}
               <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid #21262d' }}>
-                <ActionPanel onLaunchAction={handleLaunchAction} />
+                <ActionPanel
+                  onLaunchAgent={handleLaunchAgent}
+                  onInjectCurrent={handleInjectCurrent}
+                  hasActiveTab={!!activeTabId}
+                />
               </div>
             </div>
           )}
