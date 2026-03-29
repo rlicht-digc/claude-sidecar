@@ -4,6 +4,11 @@ import { getEventColor } from '../utils/colors';
 
 let activityCounter = 0;
 
+interface HoverInfo {
+  text: string;
+  type: 'directory' | 'file' | 'activity' | 'tool';
+}
+
 interface SidecarStore {
   // Connection
   connected: boolean;
@@ -30,6 +35,10 @@ interface SidecarStore {
 
   // Active (highlighted) file paths
   activePaths: Map<string, { status: string; timestamp: number }>;
+
+  // Hover info for character speech
+  hoverInfo: HoverInfo | null;
+  setHoverInfo: (info: HoverInfo | null) => void;
 
   // Process incoming event
   processEvent: (event: SidecarEvent) => void;
@@ -108,6 +117,9 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
     }),
 
   activePaths: new Map(),
+
+  hoverInfo: null,
+  setHoverInfo: (info) => set({ hoverInfo: info }),
 
   processEvent: (event) => {
     const { message, detail } = formatEventMessage(event);

@@ -34,7 +34,7 @@ Diagnose and fix the blank screen bug. The issue is in `client/src/App.tsx` and 
 ## Reproduce
 
 ```bash
-cd /Users/russelllicht/claude-sidecar
+cd claude-sidecar
 npm run dev
 # Open http://localhost:3578 — see blank screen
 ```

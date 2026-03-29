@@ -6,6 +6,7 @@ export type EventType =
   | 'tool:glob'
   | 'tool:grep'
   | 'tool:agent'
+  | 'tool:other'
   | 'fs:create'
   | 'fs:change'
   | 'fs:delete'
@@ -15,6 +16,7 @@ export type EventType =
 export interface SidecarEvent {
   type: EventType;
   timestamp: number;
+  session_id?: string;
   data: {
     path?: string;
     relativePath?: string;
@@ -47,4 +49,16 @@ export interface ActivityItem {
   path?: string;
   timestamp: number;
   color: string;
+}
+
+export interface TerminalSession {
+  pid: number;
+  shell: string;
+  cwd: string;
+  dirName: string;
+  tty: string;
+  isGitRepo: boolean;
+  gitBranch?: string;
+  hasClaude: boolean;
+  claudeEventCount: number;
 }

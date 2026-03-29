@@ -4,11 +4,22 @@ import { WebSocketServer, WebSocket } from 'ws';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { setupFileWatcher } from './fileWatcher.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Graceful JSON error handling — don't crash on malformed payloads
+app.use((err: any, _req: any, res: any, next: any) => {
+  if (err.type === 'entity.parse.failed') {
+    console.warn('Malformed JSON received, ignoring');
+    res.status(400).json({ error: 'invalid json' });
+    return;
+  }
+  next(err);
+});
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
@@ -33,12 +44,31 @@ function broadcast(event: any) {
   }
 }
 
+// --- Session tracking ---
+// Track which terminals have sent events (Claude Code sessions)
+const activeSessions = new Map<string, { lastEvent: number; eventCount: number; cwd?: string }>();
+
 // Receive events from Claude Code hooks
 app.post('/event', (req, res) => {
   const event = {
     ...req.body,
     timestamp: req.body.timestamp || Date.now(),
   };
+
+  // Track session activity
+  const sessionId = req.body.session_id || 'default';
+  const session = activeSessions.get(sessionId) || { lastEvent: 0, eventCount: 0 };
+  session.lastEvent = Date.now();
+  session.eventCount++;
+  if (event.data?.path) {
+    // Infer working directory from file path
+    const parts = event.data.path.split('/');
+    if (parts.length > 3) {
+      session.cwd = parts.slice(0, 4).join('/');
+    }
+  }
+  activeSessions.set(sessionId, session);
+
   console.log(`Event: ${event.type} ${event.data?.path || event.data?.tool_name || ''}`);
   broadcast(event);
   res.json({ ok: true });
@@ -120,9 +150,180 @@ app.post('/scan', (req, res) => {
   }
 });
 
+// --- File content preview ---
+app.post('/file-preview', (req, res) => {
+  const { path: filePath, maxLines = 30 } = req.body;
+  if (!filePath || !fs.existsSync(filePath)) {
+    res.status(400).json({ error: 'file not found' });
+    return;
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      res.status(400).json({ error: 'path is a directory' });
+      return;
+    }
+    // Skip binary / large files
+    if (stat.size > 500_000) {
+      res.json({ ok: true, content: `[File too large: ${(stat.size / 1024).toFixed(0)}KB]`, lines: 0, size: stat.size });
+      return;
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    const preview = lines.slice(0, maxLines).join('\n');
+    const ext = path.extname(filePath).slice(1);
+
+    res.json({
+      ok: true,
+      content: preview,
+      lines: lines.length,
+      size: stat.size,
+      language: ext,
+      truncated: lines.length > maxLines,
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'failed to read file' });
+  }
+});
+
+// Detect active terminal sessions
+interface TerminalSession {
+  pid: number;
+  shell: string;
+  cwd: string;
+  dirName: string;
+  tty: string;
+  isGitRepo: boolean;
+  gitBranch?: string;
+  hasClaude: boolean;
+  claudeEventCount: number;
+}
+
+function detectTerminals(): TerminalSession[] {
+  try {
+    const psOutput = execSync(
+      `ps -eo pid,tty,comm | grep -E '(zsh|bash|fish)' | grep -v grep`,
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+
+    if (!psOutput) return [];
+
+    // Check for running claude processes to match to TTYs
+    let claudeTTYs = new Set<string>();
+    try {
+      const claudePs = execSync(
+        `ps -eo tty,comm | grep -i claude | grep -v grep`,
+        { encoding: 'utf-8', timeout: 2000 }
+      ).trim();
+      for (const line of claudePs.split('\n')) {
+        const tty = line.trim().split(/\s+/)[0];
+        if (tty && tty !== '??' && tty !== '?') claudeTTYs.add(tty);
+      }
+    } catch {}
+
+    const seen = new Map<string, TerminalSession>();
+
+    for (const line of psOutput.split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+
+      const pid = parseInt(parts[0], 10);
+      const tty = parts[1];
+      const shell = path.basename(parts[2]);
+
+      if (isNaN(pid) || tty === '??' || tty === '?') continue;
+
+      let cwd: string;
+      try {
+        cwd = execSync(`lsof -p ${pid} -a -d cwd -Fn 2>/dev/null | grep '^n' | head -1 | cut -c2-`, {
+          encoding: 'utf-8',
+          timeout: 2000,
+        }).trim();
+      } catch {
+        continue;
+      }
+
+      if (!cwd || cwd === '/' || cwd.length < 2) continue;
+      if (seen.has(cwd)) continue;
+
+      let isGitRepo = false;
+      let gitBranch: string | undefined;
+      try {
+        gitBranch = execSync(`git -C "${cwd}" rev-parse --abbrev-ref HEAD 2>/dev/null`, {
+          encoding: 'utf-8',
+          timeout: 1000,
+        }).trim();
+        isGitRepo = !!gitBranch;
+      } catch {
+        isGitRepo = false;
+      }
+
+      // Check if this terminal has Claude running or has sent events
+      const hasClaude = claudeTTYs.has(tty) ||
+        [...activeSessions.values()].some((s) => s.cwd === cwd && Date.now() - s.lastEvent < 60000);
+      const claudeEventCount = [...activeSessions.values()]
+        .filter((s) => s.cwd === cwd)
+        .reduce((sum, s) => sum + s.eventCount, 0);
+
+      seen.set(cwd, {
+        pid,
+        shell,
+        cwd,
+        dirName: path.basename(cwd),
+        tty,
+        isGitRepo,
+        gitBranch,
+        hasClaude,
+        claudeEventCount,
+      });
+    }
+
+    // Sort: Claude sessions first, then by name
+    return Array.from(seen.values()).sort((a, b) => {
+      if (a.hasClaude && !b.hasClaude) return -1;
+      if (!a.hasClaude && b.hasClaude) return 1;
+      return a.dirName.localeCompare(b.dirName);
+    });
+  } catch {
+    return [];
+  }
+}
+
+app.get('/terminals', (_req, res) => {
+  const terminals = detectTerminals();
+  res.json({ ok: true, terminals });
+});
+
+// Repo review - analyze and generate organization suggestions
+app.post('/review', (req, res) => {
+  const { path: repoPath } = req.body;
+  if (!repoPath || !fs.existsSync(repoPath)) {
+    res.status(400).json({ error: 'valid path required' });
+    return;
+  }
+
+  try {
+    const scriptPath = path.join(__dirname, '../../scripts/review-repo.sh');
+    const output = execSync(`bash "${scriptPath}" "${repoPath}"`, {
+      encoding: 'utf-8',
+      timeout: 30000,
+    });
+
+    // Find the review file path from the output
+    const match = output.match(/Review saved to: (.+)/);
+    const reviewPath = match?.[1]?.trim();
+
+    res.json({ ok: true, output, reviewPath });
+  } catch (e: any) {
+    res.status(500).json({ error: 'review failed', detail: e.message });
+  }
+});
+
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', clients: clients.size });
+  res.json({ status: 'ok', clients: clients.size, sessions: activeSessions.size });
 });
 
 const PORT = process.env.PORT || 3577;

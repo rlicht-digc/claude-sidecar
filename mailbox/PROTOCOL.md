@@ -15,6 +15,6 @@ Async coordination between Claude (interactive terminal) and Codex (autonomous a
 - Body: Summary, Details, Reproduce, Reply Requested
 
 ## Project
-- Repo: local at `/Users/russelllicht/claude-sidecar/` (not yet on GitHub)
+- Repo: `claude-sidecar` (GitHub)
 - Stack: Node.js/TypeScript server (Express+WS), React/Vite client, Framer Motion, Zustand
 - Server port: 3577, Client port: 3578

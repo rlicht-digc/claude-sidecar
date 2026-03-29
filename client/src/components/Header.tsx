@@ -1,13 +1,15 @@
 import { useSidecarStore } from '../store/store';
-import { VscPulse, VscFolderOpened, VscSearch } from 'react-icons/vsc';
+import { VscPulse, VscFolderOpened, VscSearch, VscUnmute, VscMute } from 'react-icons/vsc';
 import { useState } from 'react';
 
 interface HeaderProps {
   onScan: (path: string) => void;
   loading: boolean;
+  soundEnabled: boolean;
+  onToggleSound: () => void;
 }
 
-export function Header({ onScan, loading }: HeaderProps) {
+export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderProps) {
   const { connected, workingDirectory, eventCount } = useSidecarStore();
   const [scanInput, setScanInput] = useState('');
 
@@ -101,6 +103,24 @@ export function Header({ onScan, loading }: HeaderProps) {
           </button>
         </div>
       </form>
+
+      {/* Sound toggle */}
+      <button
+        onClick={onToggleSound}
+        title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: soundEnabled ? '#7d8590' : '#484f58',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          padding: 4,
+          borderRadius: 4,
+        }}
+      >
+        {soundEnabled ? <VscUnmute style={{ fontSize: 16 }} /> : <VscMute style={{ fontSize: 16 }} />}
+      </button>
 
       {/* Event counter */}
       <div style={{

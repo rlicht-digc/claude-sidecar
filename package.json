@@ -18,11 +18,18 @@
   },
   "keywords": [
     "claude",
+    "claude-code",
     "sidecar",
     "developer-tools",
     "visualization",
     "real-time",
-    "websocket"
+    "websocket",
+    "hooks"
   ],
-  "license": "MIT"
+  "author": "Russell Licht",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rlicht-digc/claude-sidecar.git"
+  }
 }
