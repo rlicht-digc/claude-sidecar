@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useSidecarStore } from '../store/store';
-import { simplifyEvent } from '../utils/simplify';
 import { theme as t } from '../utils/theme';
 
 /** Persistent status bar showing real-time AI activity at a glance */
@@ -8,6 +7,7 @@ export function StatusBar() {
   const activities = useSidecarStore((s) => s.activities);
   const eventCount = useSidecarStore((s) => s.eventCount);
   const connected = useSidecarStore((s) => s.connected);
+  const currentNarrative = useSidecarStore((s) => s.currentNarrative);
 
   const status = useMemo(() => {
     if (activities.length === 0) return { text: 'Waiting for activity...', color: t.text.muted, isActive: false };
@@ -17,13 +17,13 @@ export function StatusBar() {
 
     if (age > 30000) return { text: 'Idle', color: t.text.muted, isActive: false };
     if (age > 10000) return {
-      text: simplifyEvent(latest.type, { path: latest.path }),
+      text: currentNarrative || latest.message,
       color: t.status.idle,
       isActive: false,
     };
 
     return {
-      text: simplifyEvent(latest.type, { path: latest.path }),
+      text: currentNarrative || latest.message,
       color: t.status.active,
       isActive: true,
     };

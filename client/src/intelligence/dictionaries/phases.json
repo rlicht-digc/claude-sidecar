@@ -1,0 +1,10 @@
+{
+  "exploring": { "description": "Reading and scanning the codebase to understand how things work" },
+  "planning": { "description": "Deciding what to change and how, before touching any code" },
+  "implementing": { "description": "Writing and editing code to build the requested feature or fix" },
+  "verifying": { "description": "Running tests and checks to make sure the changes work correctly" },
+  "debugging": { "description": "Tracking down and fixing a problem in the code" },
+  "configuring": { "description": "Setting up or adjusting project settings and dependencies" },
+  "delegating": { "description": "Handing off a piece of work to a specialized helper agent" },
+  "idle": { "description": "Waiting for something to do" }
+}

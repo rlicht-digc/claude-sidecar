@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { FileTreeNode, SidecarEvent, ActivityItem } from '../types';
 import { getEventColor } from '../utils/colors';
+import { intelligence } from '../intelligence';
 
 let activityCounter = 0;
 
@@ -39,6 +40,12 @@ interface SidecarStore {
   // Hover info for character speech
   hoverInfo: HoverInfo | null;
   setHoverInfo: (info: HoverInfo | null) => void;
+
+  // Intelligence layer state
+  currentNarrative: string | null;
+  currentPhase: string;
+  teachingBubble: { text: string; conceptKey: string } | null;
+  dismissTeaching: (key: string) => void;
 
   // Process incoming event
   processEvent: (event: SidecarEvent) => void;
@@ -121,14 +128,25 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
   hoverInfo: null,
   setHoverInfo: (info) => set({ hoverInfo: info }),
 
+  currentNarrative: null,
+  currentPhase: 'idle',
+  teachingBubble: null,
+  dismissTeaching: (key) => {
+    intelligence.dismissConcept(key);
+    set({ teachingBubble: null });
+  },
+
   processEvent: (event) => {
+    // Run through intelligence layer
+    const enriched = intelligence.process(event);
+
     const { message, detail } = formatEventMessage(event);
     const color = getEventColor(event.type);
 
     const activity: ActivityItem = {
       id: `${++activityCounter}`,
       type: event.type,
-      message,
+      message: enriched.parsed.summary || message,
       detail,
       path: event.data?.path,
       timestamp: event.timestamp,
@@ -177,6 +195,9 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
         eventCount: state.eventCount + 1,
         activePaths: newActivePaths,
         expandedPaths: newExpanded,
+        currentNarrative: enriched.narrative,
+        currentPhase: enriched.phase,
+        teachingBubble: enriched.teaching ? { text: enriched.teaching.text, conceptKey: enriched.teaching.conceptKey } : state.teachingBubble,
       };
     });
   },

@@ -1,0 +1,23 @@
+{
+  "next": "This is a Next.js project — a React framework for building websites with fast page loads and server-side rendering.",
+  "react": "This is a React project — it builds interactive user interfaces from reusable components.",
+  "vue": "This is a Vue.js project — a progressive framework for building user interfaces.",
+  "angular": "This is an Angular project — a full-featured framework for building large-scale web applications.",
+  "svelte": "This is a Svelte project — a compiler that creates lightweight, fast web interfaces.",
+  "express": "This project uses Express — a web server that handles HTTP requests and responses.",
+  "fastapi": "This project uses FastAPI — a modern Python web framework for building APIs quickly.",
+  "django": "This is a Django project — a batteries-included Python web framework.",
+  "flask": "This project uses Flask — a lightweight Python web framework.",
+  "electron": "This is an Electron app — a web technology turned into a desktop application.",
+  "tauri": "This is a Tauri app — a lightweight framework for building desktop apps.",
+  "react-native": "This is a React Native app — builds mobile apps for iOS and Android using React.",
+  "gatsby": "This is a Gatsby site — generates fast static websites from React components.",
+  "nuxt": "This is a Nuxt.js project — the Vue equivalent of Next.js for server-rendered apps.",
+  "nest": "This project uses NestJS — a structured Node.js framework inspired by Angular.",
+  "rails": "This is a Ruby on Rails project — a convention-over-configuration web framework.",
+  "spring": "This is a Spring project — Java's most popular enterprise application framework.",
+  "laravel": "This is a Laravel project — an elegant PHP web framework.",
+  "tensorflow": "This project uses TensorFlow — a framework for building and training AI models.",
+  "pytorch": "This project uses PyTorch — a research-friendly machine learning framework.",
+  "vite": "This project uses Vite — a blazing-fast development server and build tool."
+}
