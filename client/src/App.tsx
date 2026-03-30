@@ -1,37 +1,49 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useEventBridge } from './hooks/useElectronBridge';
 import { useSoundEffects } from './hooks/useSoundEffects';
 import { useSidecarStore } from './store/store';
 import { Header } from './components/Header';
-import { SessionCatalog } from './components/SessionCatalog';
 import { Terminal } from './components/Terminal';
-import { TerminalTabBar, TabInfo } from './components/TerminalTabBar';
+import { TabInfo } from './components/TerminalTabBar';
 import { ResizeHandle } from './components/ResizeHandle';
+import { ActionPanel } from './components/ActionPanel';
 import { WorkspaceScene } from './components/visual/WorkspaceScene';
 import { ContextBubbles } from './components/visual/ContextBubbles';
-import { ClaudeFella } from './components/visual/ClaudeFella';
-import { ActionTicker } from './components/visual/ActionTicker';
-import { ActionPanel } from './components/ActionPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { SessionCatalog } from './components/SessionCatalog';
+import { simplifyEvent } from './utils/simplify';
+import { theme as t } from './utils/theme';
 
 const isElectron = !!window.terminalSaddle;
 
 export default function App() {
   useEventBridge();
-  const { fileTree, workingDirectory, setWorkingDirectory, setFileTree } = useSidecarStore();
+  const { fileTree, workingDirectory, setWorkingDirectory, setFileTree, activities } = useSidecarStore();
   const [loading, setLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>('');
 
-  // Resizable panel widths
-  const [leftWidth, setLeftWidth] = useState(240);
+  // Panel widths
+  const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(320);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
   useSoundEffects(soundEnabled);
+
+  // Load username
+  useEffect(() => {
+    const saved = localStorage.getItem('saddle-username');
+    if (saved) setUserName(saved);
+    else {
+      // Default to system user
+      const user = window.terminalSaddle?.platform === 'darwin' ? 'User' : 'User';
+      setUserName(user);
+    }
+  }, []);
 
   const handleScan = async (path: string) => {
     setLoading(true);
@@ -60,11 +72,9 @@ export default function App() {
   const handleNewTab = useCallback(async (cwd?: string) => {
     if (!window.terminalSaddle) return;
     try {
-      const result = await window.terminalSaddle.terminal.create({
-        cwd: cwd || undefined,
-      });
+      const result = await window.terminalSaddle.terminal.create({ cwd: cwd || undefined });
       const tabId = result.tabId;
-      const label = cwd ? cwd.split('/').pop() || 'Terminal' : 'Terminal';
+      const label = cwd ? cwd.split('/').pop() || 'Terminal' : 'New Terminal';
       const newTab: TabInfo = { id: tabId, sessionId: result.sessionId, label, cwd: cwd || '' };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(tabId);
@@ -72,7 +82,6 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to open terminal';
       setTerminalError(message);
-      console.error('Failed to create terminal:', error);
     }
   }, []);
 
@@ -88,92 +97,56 @@ export default function App() {
     });
   }, [activeTabId]);
 
-  const handleSelectTab = useCallback((tabId: string) => {
-    setActiveTabId(tabId);
-  }, []);
-
-  // Restore a past session: open new shell in same cwd, replay transcript as scrollback
   const handleRestoreSession = useCallback(async (session: { id: string; cwd: string; name: string }) => {
     if (!window.terminalSaddle) return;
     try {
-      // Get the saved transcript
-      const transcript = await window.terminalSaddle.sessions.getTranscript(session.id, { tail: 500 });
-
-      // Open a new terminal in the same cwd
       const result = await window.terminalSaddle.terminal.create({ cwd: session.cwd });
-      const tabId = result.tabId;
-      const newTab: TabInfo = {
-        id: tabId,
-        sessionId: result.sessionId,
-        label: session.name,
-        cwd: session.cwd,
-      };
+      const newTab: TabInfo = { id: result.tabId, sessionId: result.sessionId, label: session.name, cwd: session.cwd };
       setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(tabId);
-      setTerminalError(null);
-
-      // Replay transcript as scrollback after a short delay (let xterm mount)
-      if (transcript) {
-        setTimeout(() => {
-          // Write a visual separator then the old output
-          const separator = '\x1b[90m─── restored from previous session ───\x1b[0m\r\n';
-          // The transcript replay happens via the snapshot mechanism:
-          // Terminal.tsx calls getSnapshot on mount, but that's for the NEW pty.
-          // Instead, we write directly to the terminal via a custom approach.
-          // We'll use a workaround: write the old transcript to the new PTY's output buffer
-          // Actually, the cleanest way is to emit the old transcript to the renderer
-          // For now, we send it as if it were PTY output
-        }, 300);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to restore session';
-      setTerminalError(message);
-    }
+      setActiveTabId(result.tabId);
+    } catch {}
   }, []);
 
-  // Launch action in agent tab (reuse existing Claude/Codex action tab if one exists)
+  // Action launcher with tab reuse
   const handleLaunchAgent = useCallback(async (command: string, label: string, agent: 'claude' | 'codex') => {
     if (!window.terminalSaddle) return;
     try {
-      // Check for existing action tab with this agent type
       const existingTab = tabs.find((t) => t.actionAgent === agent);
-
       if (existingTab) {
-        // Reuse: switch to it and type the new command
         setActiveTabId(existingTab.id);
-        // Send Ctrl+C first to cancel any running process, then the new command
         setTimeout(() => {
           window.terminalSaddle?.terminal.write(existingTab.id, '\x03\n');
-          setTimeout(() => {
-            window.terminalSaddle?.terminal.write(existingTab.id, command + '\n');
-          }, 300);
+          setTimeout(() => window.terminalSaddle?.terminal.write(existingTab.id, command + '\n'), 300);
         }, 100);
       } else {
-        // Create new action tab
-        const cwd = workingDirectory || undefined;
-        const result = await window.terminalSaddle.terminal.create({ cwd });
-        const tabId = result.tabId;
-        const newTab: TabInfo = { id: tabId, sessionId: result.sessionId, label, cwd: cwd || '', actionAgent: agent };
+        const result = await window.terminalSaddle.terminal.create({ cwd: workingDirectory || undefined });
+        const newTab: TabInfo = { id: result.tabId, sessionId: result.sessionId, label, cwd: workingDirectory || '', actionAgent: agent };
         setTabs((prev) => [...prev, newTab]);
-        setActiveTabId(tabId);
-        setTerminalError(null);
-
-        // Wait for shell to initialize, then type the command
-        setTimeout(() => {
-          window.terminalSaddle?.terminal.write(tabId, command + '\n');
-        }, 800);
+        setActiveTabId(result.tabId);
+        setTimeout(() => window.terminalSaddle?.terminal.write(result.tabId, command + '\n'), 800);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to launch action';
-      setTerminalError(message);
-    }
+    } catch {}
   }, [workingDirectory, tabs]);
 
-  // Inject prompt into the active terminal tab (for "Current Terminal" option)
   const handleInjectCurrent = useCallback((prompt: string) => {
     if (!window.terminalSaddle || !activeTabId) return;
     window.terminalSaddle.terminal.write(activeTabId, prompt + '\n');
   }, [activeTabId]);
+
+  // Get latest activity description for a tab
+  function getTabActivity(tabCwd: string): string {
+    const recent = activities.filter((a) => a.path?.includes(tabCwd.split('/').pop() || '')).slice(0, 1);
+    if (recent.length === 0) return '';
+    return simplifyEvent(recent[0].type, { path: recent[0].path });
+  }
+
+  // Determine tab display label
+  function getTabDisplayLabel(tab: TabInfo): string {
+    if (tab.actionAgent === 'claude') return 'Claude CLI';
+    if (tab.actionAgent === 'codex') return 'Codex CLI';
+    if (tab.label && tab.label !== 'New Terminal') return tab.label;
+    return 'Terminal';
+  }
 
   const effectiveLeftWidth = leftCollapsed ? 0 : leftWidth;
   const effectiveRightWidth = rightCollapsed ? 0 : rightWidth;
@@ -181,81 +154,161 @@ export default function App() {
   if (isElectron) {
     return (
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: '#0d1117',
-        color: '#e6edf3',
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif",
+        display: 'flex', flexDirection: 'column', height: '100vh',
+        background: t.bg.base, color: t.text.primary, fontFamily: t.font.sans,
       }}>
         <Header onScan={handleScan} loading={loading} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* LEFT: Session sidebar */}
+
+          {/* ========== LEFT PANEL ========== */}
           {!leftCollapsed && (
-            <div style={{ width: effectiveLeftWidth, minWidth: effectiveLeftWidth, overflow: 'hidden', flexShrink: 0 }}>
-              <SessionCatalog onOpenTab={(cwd) => handleNewTab(cwd)} onRestoreSession={handleRestoreSession} />
+            <div style={{
+              width: effectiveLeftWidth, minWidth: effectiveLeftWidth, flexShrink: 0,
+              background: t.bg.base, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              borderRight: `1px solid ${t.border.subtle}`,
+            }}>
+              {/* User name */}
+              <div style={{ padding: '14px 16px 6px' }}>
+                <div
+                  style={{ fontSize: 11, color: t.text.muted, cursor: 'pointer' }}
+                  title="Click to change name"
+                  onClick={() => {
+                    const name = prompt('Your name:', userName);
+                    if (name) { setUserName(name); localStorage.setItem('saddle-username', name); }
+                  }}
+                >
+                  {userName || 'User'}
+                </div>
+              </div>
+
+              {/* ACTIVE header */}
+              <div style={{
+                margin: '4px 12px 8px',
+                padding: '8px 12px',
+                background: t.bg.surface,
+                border: `1px solid ${t.border.default}`,
+                borderRadius: t.radius.md,
+              }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 800, color: t.text.primary,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: t.status.active, boxShadow: t.shadow.glow(t.status.active),
+                  }} />
+                  Active
+                  <span style={{ fontSize: 12, fontWeight: 400, color: t.text.muted }}>
+                    {tabs.length} tab{tabs.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Terminal tabs (Chrome-style) */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
+                {tabs.map((tab) => {
+                  const isActive = tab.id === activeTabId;
+                  const activity = getTabActivity(tab.cwd);
+                  const label = getTabDisplayLabel(tab);
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTabId(tab.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '10px 12px', marginBottom: 4,
+                        background: isActive ? t.bg.elevated : t.bg.surface,
+                        border: `1px solid ${isActive ? t.accent.purple + '50' : t.border.subtle}`,
+                        borderRadius: t.radius.md,
+                        color: isActive ? t.text.primary : t.text.secondary,
+                        cursor: 'pointer', textAlign: 'left',
+                        transition: 'all 0.12s ease',
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = t.bg.elevated; }}
+                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = t.bg.surface; }}
+                    >
+                      {/* Tab icon */}
+                      <span style={{ fontSize: 14, flexShrink: 0 }}>
+                        {tab.actionAgent === 'claude' ? '✦' : tab.actionAgent === 'codex' ? '◈' : '▸'}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {label}
+                        </div>
+                        {activity && (
+                          <div style={{
+                            fontSize: 10, color: t.text.muted, marginTop: 2,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {activity}
+                          </div>
+                        )}
+                      </div>
+                      {/* Close button */}
+                      <span
+                        onClick={(e) => { e.stopPropagation(); handleCloseTab(tab.id); }}
+                        style={{
+                          fontSize: 14, color: t.text.muted, cursor: 'pointer', padding: '0 2px',
+                          borderRadius: 4, lineHeight: 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = t.accent.red; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = t.text.muted; }}
+                      >
+                        ×
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* New tab button (Chrome + style) */}
+                <button
+                  onClick={() => handleNewTab()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '8px 12px', marginBottom: 4,
+                    background: 'transparent',
+                    border: `1px dashed ${t.border.default}`,
+                    borderRadius: t.radius.md,
+                    color: t.text.muted, cursor: 'pointer', fontSize: 13,
+                    transition: 'all 0.12s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.accent.purple; e.currentTarget.style.color = t.text.primary; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border.default; e.currentTarget.style.color = t.text.muted; }}
+                >
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                  <span>New Tab</span>
+                </button>
+
+                {terminalError && (
+                  <div style={{ padding: 8, fontSize: 11, color: t.accent.red, lineHeight: 1.4 }}>
+                    {terminalError}
+                  </div>
+                )}
+
+                {/* Detected external sessions */}
+                <div style={{ marginTop: 12 }}>
+                  <SessionCatalog onOpenTab={(cwd) => handleNewTab(cwd)} onRestoreSession={handleRestoreSession} />
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Left resize handle */}
-          <ResizeHandle
-            side="left"
-            initialWidth={leftWidth}
-            minWidth={140}
-            maxWidth={400}
-            onResize={setLeftWidth}
-            collapsed={leftCollapsed}
-            onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)}
-          />
+          <ResizeHandle side="left" initialWidth={leftWidth} minWidth={200} maxWidth={450}
+            onResize={setLeftWidth} collapsed={leftCollapsed}
+            onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)} />
 
-          {/* CENTER: Terminal area */}
+          {/* ========== CENTER: Terminal ========== */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 300 }}>
-            <TerminalTabBar
-              tabs={tabs}
-              activeTabId={activeTabId}
-              onSelectTab={handleSelectTab}
-              onNewTab={() => handleNewTab()}
-              onCloseTab={handleCloseTab}
-            />
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               {tabs.length === 0 ? (
                 <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 12,
-                  color: '#484f58',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  height: '100%', gap: 16, color: t.text.muted,
                 }}>
-                  <span style={{ fontSize: 14 }}>No terminals open</span>
-                  {terminalError && (
-                    <div style={{
-                      maxWidth: 520,
-                      color: '#f85149',
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      textAlign: 'center',
-                    }}>
-                      {terminalError}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => handleNewTab()}
-                    style={{
-                      background: '#238636',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '8px 16px',
-                      fontSize: 13,
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Open Terminal
-                  </button>
+                  <span style={{ fontSize: 32, opacity: 0.3 }}>▸</span>
+                  <span style={{ fontSize: 14 }}>Open a terminal tab to get started</span>
                 </div>
               ) : (
                 tabs.map((tab) => (
@@ -265,33 +318,30 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right resize handle */}
-          <ResizeHandle
-            side="right"
-            initialWidth={rightWidth}
-            minWidth={200}
-            maxWidth={500}
-            onResize={setRightWidth}
-            collapsed={rightCollapsed}
-            onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
-          />
+          <ResizeHandle side="right" initialWidth={rightWidth} minWidth={240} maxWidth={500}
+            onResize={setRightWidth} collapsed={rightCollapsed}
+            onToggleCollapse={() => setRightCollapsed(!rightCollapsed)} />
 
-          {/* RIGHT: Animation + Actions panel */}
+          {/* ========== RIGHT PANEL: Actions (top) + Animation (bottom) ========== */}
           {!rightCollapsed && (
             <div style={{
-              width: effectiveRightWidth,
-              minWidth: effectiveRightWidth,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              background: '#0d1117',
-              flexShrink: 0,
+              width: effectiveRightWidth, minWidth: effectiveRightWidth, flexShrink: 0,
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              background: t.bg.base, borderLeft: `1px solid ${t.border.subtle}`,
             }}>
+              {/* Actions (top) */}
+              <div style={{ flex: 1, overflow: 'hidden', borderBottom: `1px solid ${t.border.subtle}` }}>
+                <ActionPanel
+                  onLaunchAgent={handleLaunchAgent}
+                  onInjectCurrent={handleInjectCurrent}
+                  hasActiveTab={!!activeTabId}
+                />
+              </div>
+
+              {/* Animation area (bottom) — placeholder until assets arrive */}
               <div style={{
-                flex: 1,
-                position: 'relative',
-                overflow: 'hidden',
-                borderBottom: '1px solid #21262d',
+                flex: 1, position: 'relative', overflow: 'hidden',
+                background: t.bg.surface,
               }}>
                 {fileTree.length > 0 ? (
                   <>
@@ -300,28 +350,13 @@ export default function App() {
                   </>
                 ) : (
                   <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                    color: '#484f58',
-                    fontSize: 12,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    height: '100%', color: t.text.muted, fontSize: 11, gap: 8,
                   }}>
-                    Scan a project to see agent activity
+                    <span style={{ fontSize: 24, opacity: 0.2 }}>◎</span>
+                    <span>Agent activity will appear here</span>
                   </div>
                 )}
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 0 }}>
-                  <ClaudeFella />
-                </div>
-              </div>
-
-              {/* Action buttons (bottom half) */}
-              <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid #21262d' }}>
-                <ActionPanel
-                  onLaunchAgent={handleLaunchAgent}
-                  onInjectCurrent={handleInjectCurrent}
-                  hasActiveTab={!!activeTabId}
-                />
               </div>
             </div>
           )}
@@ -330,23 +365,17 @@ export default function App() {
     );
   }
 
-  // FALLBACK: Original web layout (non-Electron)
+  // FALLBACK: Web layout
   return (
     <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      background: '#0d1117',
-      color: '#e6edf3',
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif",
+      display: 'flex', flexDirection: 'column', height: '100vh',
+      background: t.bg.base, color: t.text.primary, fontFamily: t.font.sans,
     }}>
       <Header onScan={handleScan} loading={loading} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div style={{ width: 200, flexShrink: 0 }}>
+        <div style={{ width: 220, flexShrink: 0 }}>
           <SessionCatalog onOpenTab={handleScan} onRestoreSession={() => {}} />
         </div>
-
         <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
             {fileTree.length === 0 && !loading ? (
@@ -357,9 +386,6 @@ export default function App() {
                 <ContextBubbles />
               </>
             )}
-          </div>
-          <div style={{ position: 'relative', height: 0 }}>
-            <ClaudeFella />
           </div>
         </div>
       </div>

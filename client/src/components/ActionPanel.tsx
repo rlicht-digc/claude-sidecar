@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ACTIONS, ActionDef, ActionVariant, AgentCLI, buildCommand, buildCurrentTerminalPrompt } from '../config/actions';
 import { useSidecarStore } from '../store/store';
+import { theme as t } from '../utils/theme';
 
 interface ActionPanelProps {
   /** Launch action in a new or reused agent tab. Returns nothing if tab reuse. */
