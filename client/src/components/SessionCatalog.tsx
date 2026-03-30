@@ -37,7 +37,7 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [pastSessions, setPastSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showRecent, setShowRecent] = useState(true);
+  const [showRecent, setShowRecent] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [expandedCwd, setExpandedCwd] = useState<string | null>(null);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
