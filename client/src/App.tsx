@@ -9,6 +9,8 @@ import { ResizeHandle } from './components/ResizeHandle';
 import { ActionPanel } from './components/ActionPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { StatusBar } from './components/StatusBar';
+import { LiveActivity } from './components/LiveActivity';
+import { WorkspaceScene } from './components/visual/WorkspaceScene';
 import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
 import { SessionCatalog } from './components/SessionCatalog';
 import { simplifyEvent } from './utils/simplify';
@@ -169,6 +171,7 @@ export default function App() {
               borderRadius: '0 16px 16px 0',
               margin: '6px 0 0 6px',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              position: 'relative',
             }}>
               {/* User name */}
               <div style={{ padding: '14px 16px 6px' }}>
@@ -290,10 +293,13 @@ export default function App() {
                 )}
 
                 {/* Detected external sessions */}
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12, paddingBottom: 140 /* space for anchored live activity */ }}>
                   <SessionCatalog onOpenTab={(cwd) => handleNewTab(cwd)} onRestoreSession={handleRestoreSession} />
                 </div>
               </div>
+
+              {/* Live Activity — anchored to bottom, superimposed */}
+              <LiveActivity />
             </div>
           )}
 
@@ -327,7 +333,7 @@ export default function App() {
             onResize={setRightWidth} collapsed={rightCollapsed}
             onToggleCollapse={() => setRightCollapsed(!rightCollapsed)} />
 
-          {/* ========== RIGHT PANEL: Actions (top) + Animation (bottom) ========== */}
+          {/* ========== RIGHT PANEL: 3 sections ========== */}
           {!rightCollapsed && (
             <div style={{
               width: effectiveRightWidth, minWidth: effectiveRightWidth, flexShrink: 0,
@@ -336,8 +342,30 @@ export default function App() {
               borderRadius: '16px 0 0 16px',
               margin: '6px 6px 0 0',
             }}>
-              {/* Actions (top) */}
-              <div style={{ flex: 1, overflow: 'hidden', borderBottom: `1px solid ${t.border.subtle}` }}>
+              {/* TOP (~30%): File cabinet / workspace visualization */}
+              <div style={{
+                flex: 3, overflow: 'hidden',
+                borderBottom: `1px solid ${t.glass.border}`,
+                position: 'relative',
+              }}>
+                {fileTree.length > 0 ? (
+                  <WorkspaceScene />
+                ) : (
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    height: '100%', color: t.text.muted, fontSize: 11, gap: 6,
+                  }}>
+                    <span style={{ fontSize: 20, opacity: 0.2 }}>📁</span>
+                    <span>Scan a project to see files</span>
+                  </div>
+                )}
+              </div>
+
+              {/* MIDDLE (~40%): Action buttons */}
+              <div style={{
+                flex: 4, overflow: 'hidden',
+                borderBottom: `1px solid ${t.glass.border}`,
+              }}>
                 <ActionPanel
                   onLaunchAgent={handleLaunchAgent}
                   onInjectCurrent={handleInjectCurrent}
@@ -345,23 +373,23 @@ export default function App() {
                 />
               </div>
 
-              {/* Animation area (bottom) — BotAvatar driven by live events */}
+              {/* BOTTOM (~30%): BotAvatar driven by live events */}
               <div style={{
-                flex: 1, position: 'relative', overflow: 'hidden',
+                flex: 3, overflow: 'hidden',
                 background: t.glass.bg,
-                borderTop: `1px solid ${t.glass.border}`,
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                padding: 8,
               }}>
                 <BotAvatar
                   state={activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
                     ? eventToBotState(activities[0].type)
                     : 'idle'}
-                  size={160}
+                  size={100}
                 />
-                <div style={{ fontSize: 11, color: t.text.muted, marginTop: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: t.text.muted, marginTop: 6, textAlign: 'center' }}>
                   {activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
                     ? simplifyEvent(activities[0].type, { path: activities[0].path })
-                    : 'Waiting for activity...'}
+                    : 'Idle'}
                 </div>
               </div>
             </div>

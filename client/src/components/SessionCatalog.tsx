@@ -333,57 +333,6 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
         )}
       </div>
 
-      {/* === BOTTOM 1/3: Live activity description === */}
-      <div style={{
-        flex: 1, minHeight: 120, maxHeight: 200,
-        borderTop: `1px solid ${t.border.subtle}`,
-        background: t.bg.surface, padding: '12px 14px',
-        display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden',
-      }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: t.text.secondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {hoveredTab ? 'Session Activity' : 'Live Activity'}
-        </div>
-
-        {hoveredTab ? (
-          // Show activity for the hovered session
-          <div style={{ fontSize: 12, color: t.text.primary, lineHeight: 1.6 }}>
-            {getHoveredDescription()?.split('\n').map((line, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: t.accent.purple, flexShrink: 0 }} />
-                <span>{line}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          // Show latest activity across all sessions
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto' }}>
-            {activities.slice(0, 6).map((a, i) => (
-              <motion.div
-                key={a.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2, delay: i * 0.03 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}
-              >
-                <span style={{
-                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                  background: a.color || t.accent.purple,
-                }} />
-                <span style={{ color: t.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {simplifyEvent(a.type, { path: a.path })}
-                </span>
-                <span style={{ fontSize: 9, color: t.text.muted, flexShrink: 0 }}>
-                  {timeAgo(new Date(a.timestamp).toISOString())}
-                </span>
-              </motion.div>
-            ))}
-            {activities.length === 0 && (
-              <span style={{ fontSize: 12, color: t.text.muted }}>Waiting for activity...</span>
-            )}
-          </div>
-        )}
-      </div>
-
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
