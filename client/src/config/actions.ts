@@ -21,29 +21,43 @@ export interface ActionDef {
   variants: Partial<Record<ActionScope, ActionVariant>>;
 }
 
-export const CLI_COMMANDS = {
-  claude: `claude --dangerously-skip-permissions -p "{{prompt}}"`,
-  codex: `codex --full-auto "{{prompt}}"`,
-} as const;
+export type AgentCLI = 'claude' | 'codex';
 
-export type AgentCLI = keyof typeof CLI_COMMANDS;
-
-/** For "current terminal" scope, just the raw prompt (no CLI wrapper) */
-export function buildCurrentTerminalPrompt(variant: ActionVariant): string {
-  // For injecting into an already-running Claude/Codex session,
-  // we just type the prompt text directly
-  return variant.prompts.claude
-    .replace(/<\/?context>/g, '')
-    .replace(/<\/?instructions>/g, '')
-    .replace(/\{\{cwd\}\}/g, '.')
+/** Strip XML tags and collapse whitespace for plain-text injection */
+function flattenPrompt(prompt: string): string {
+  return prompt
+    .replace(/<\/?[a-z]+>/gi, '')  // strip all XML-like tags
+    .replace(/\n\s*\n/g, ' ')      // collapse blank lines
+    .replace(/\n/g, ' ')           // single newlines to spaces
+    .replace(/\s{2,}/g, ' ')       // collapse multiple spaces
     .trim();
 }
 
+/** For "current terminal" scope — inject plain text into running session */
+export function buildCurrentTerminalPrompt(variant: ActionVariant): string {
+  return flattenPrompt(variant.prompts.claude).replace(/\{\{cwd\}\}/g, '.');
+}
+
+/** Build a shell command that launches the CLI with the prompt.
+ *  Uses $'...' quoting to safely handle special characters. */
 export function buildCommand(variant: ActionVariant, agent: AgentCLI, cwd: string): string {
   let prompt = variant.prompts[agent];
   prompt = prompt.replace(/\{\{cwd\}\}/g, cwd);
-  const escaped = prompt.replace(/'/g, "'\\''");
-  return `cd "${cwd}" && ${CLI_COMMANDS[agent].replace('{{prompt}}', escaped)}`;
+
+  // Flatten to single line, strip XML tags for clean CLI input
+  const flat = flattenPrompt(prompt);
+
+  // Escape for $'...' shell quoting: backslash and single-quote
+  const escaped = flat.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+  // Use unquoted ~ fallback, or proper path
+  const cdCmd = cwd === '~' ? 'cd ~' : `cd '${cwd}'`;
+
+  if (agent === 'claude') {
+    return `${cdCmd} && claude --dangerously-skip-permissions -p $'${escaped}'`;
+  } else {
+    return `${cdCmd} && codex --full-auto $'${escaped}'`;
+  }
 }
 
 export const ACTIONS: ActionDef[] = [

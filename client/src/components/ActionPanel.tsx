@@ -84,10 +84,13 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
   const handleLaunchCustom = () => {
     if (!selectedAgent || !customPrompt.trim()) return;
     const cwd = selectedRepo || workingDirectory || '~';
-    const escaped = customPrompt.replace(/'/g, "'\\''");
+    // Flatten and escape for $'...' quoting
+    const flat = customPrompt.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const escaped = flat.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const cdCmd = cwd === '~' ? 'cd ~' : `cd '${cwd}'`;
     const cliCmd = selectedAgent === 'claude'
-      ? `cd "${cwd}" && claude --dangerously-skip-permissions -p '${escaped}'`
-      : `cd "${cwd}" && codex --full-auto '${escaped}'`;
+      ? `${cdCmd} && claude --dangerously-skip-permissions -p $'${escaped}'`
+      : `${cdCmd} && codex --full-auto $'${escaped}'`;
     onLaunchAgent(cliCmd, `Custom (${selectedAgent})`, selectedAgent);
     reset();
   };
