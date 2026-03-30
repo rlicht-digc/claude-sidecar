@@ -1,98 +1,114 @@
 /**
- * Terminal Saddle — Modern Theme
+ * Terminal Saddle — Liquid Glass Theme
  *
- * Inspired by Finity Design System, Arc Browser, Linear.
- * Softer than raw terminal dark. Approachable for non-technical users.
- * Purple-tinted dark with generous radius, soft shadows, clear hierarchy.
+ * Inspired by Apple's Liquid Glass (macOS/iOS), Finity Design System.
+ * Translucent panels, specular highlights, soft blurs, bright gradients.
+ * Feels techy but stylish, not technically encumbered.
  */
 
 export const theme = {
-  // Backgrounds (layered, slightly purple-tinted)
-  bg: {
-    base: '#12111a',      // deepest background
-    surface: '#1a1926',   // cards, panels
-    elevated: '#222131',  // hover states, raised elements
-    overlay: '#2a293a',   // modals, dropdowns
-    input: '#16152266',   // input fields (semi-transparent)
+  // Background gradient (vibrant, flows behind glass panels)
+  bgGradient: 'linear-gradient(135deg, #0f1b3d 0%, #1a1040 25%, #0d2847 50%, #162050 75%, #1a1040 100%)',
+
+  // Glass surfaces (translucent with blur)
+  glass: {
+    bg: 'rgba(255, 255, 255, 0.06)',
+    bgHover: 'rgba(255, 255, 255, 0.10)',
+    bgActive: 'rgba(255, 255, 255, 0.14)',
+    border: 'rgba(255, 255, 255, 0.12)',
+    borderHover: 'rgba(255, 255, 255, 0.20)',
+    borderFocus: 'rgba(120, 130, 255, 0.40)',
+    backdrop: 'blur(20px) saturate(180%)',
+    backdropLight: 'blur(12px) saturate(150%)',
+    // Specular highlight (top edge glow)
+    specular: 'inset 0 1px 0 rgba(255, 255, 255, 0.15)',
   },
 
-  // Borders (subtle, low contrast)
-  border: {
-    subtle: '#2a293a',
-    default: '#353447',
-    hover: '#4a4960',
-    focus: '#7c6eff80',
-  },
-
-  // Text
+  // Text (brighter, more readable against glass)
   text: {
-    primary: '#eeedf5',
-    secondary: '#a09eb8',
-    muted: '#6b6980',
-    disabled: '#4a4862',
+    primary: '#f0f0f8',
+    secondary: '#b8b5d0',
+    muted: '#8885a8',
+    disabled: '#5a5878',
   },
 
-  // Accent colors
+  // Accent colors (vivid but not harsh)
   accent: {
-    purple: '#7c6eff',    // primary accent
-    blue: '#5b9aff',
-    green: '#45d483',
-    orange: '#ff9653',
-    red: '#ff5c5c',
-    yellow: '#ffc240',
-    cyan: '#40d9d9',
-    pink: '#e570ff',
+    purple: '#8b7bff',
+    blue: '#5ba8ff',
+    green: '#4ddb8a',
+    orange: '#ffaa5c',
+    red: '#ff6b6b',
+    yellow: '#ffd04a',
+    cyan: '#4ae0e0',
+    pink: '#ea80ff',
   },
 
   // Agent colors
   agent: {
-    claude: '#e08a6a',    // warm terracotta
-    codex: '#5b9aff',     // cool blue
+    claude: '#e8956e',
+    codex: '#5ba8ff',
   },
 
-  // Status lights
+  // Status lights (bright, visible through glass)
   status: {
-    active: '#45d483',
-    idle: '#5b9aff',
-    inactive: '#6b6980',
-    error: '#ff5c5c',
+    active: '#4ddb8a',
+    idle: '#5ba8ff',
+    inactive: '#8885a8',
+    error: '#ff6b6b',
   },
 
-  // Event type colors
+  // Event colors
   event: {
-    read: '#5b9aff',
-    write: '#45d483',
-    edit: '#ffc240',
-    delete: '#ff5c5c',
-    search: '#b694ff',
-    command: '#b694ff',
-    agent: '#e570ff',
+    read: '#5ba8ff',
+    write: '#4ddb8a',
+    edit: '#ffd04a',
+    delete: '#ff6b6b',
+    search: '#c0a0ff',
+    command: '#c0a0ff',
+    agent: '#ea80ff',
   },
 
-  // Radii
+  // Radii (softer, rounder)
   radius: {
-    sm: '6px',
-    md: '10px',
-    lg: '14px',
-    xl: '20px',
+    sm: '8px',
+    md: '12px',
+    lg: '16px',
+    xl: '22px',
     full: '9999px',
   },
 
-  // Shadows
+  // Shadows (soft, diffused)
   shadow: {
-    sm: '0 1px 3px rgba(0,0,0,0.3)',
-    md: '0 4px 12px rgba(0,0,0,0.3)',
-    lg: '0 8px 24px rgba(0,0,0,0.4)',
-    glow: (color: string) => `0 0 12px ${color}40, 0 0 4px ${color}20`,
+    sm: '0 2px 8px rgba(0, 0, 0, 0.2)',
+    md: '0 4px 16px rgba(0, 0, 0, 0.25)',
+    lg: '0 8px 32px rgba(0, 0, 0, 0.35)',
+    glow: (color: string) => `0 0 16px ${color}50, 0 0 6px ${color}30`,
+    inner: 'inset 0 1px 2px rgba(0, 0, 0, 0.15)',
   },
 
   // Typography
   font: {
-    sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    sans: "'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     mono: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, monospace",
   },
 
-  // Spacing scale
+  // Compatibility aliases (map old names to glass equivalents)
+  bg: {
+    base: 'transparent',
+    surface: 'rgba(255, 255, 255, 0.06)',
+    elevated: 'rgba(255, 255, 255, 0.10)',
+    overlay: 'rgba(255, 255, 255, 0.14)',
+    input: 'rgba(255, 255, 255, 0.04)',
+  },
+  border: {
+    subtle: 'rgba(255, 255, 255, 0.12)',
+    default: 'rgba(255, 255, 255, 0.15)',
+    hover: 'rgba(255, 255, 255, 0.20)',
+    focus: 'rgba(120, 130, 255, 0.40)',
+  },
+
+  // Spacing
   space: {
     xs: '4px',
     sm: '8px',
@@ -101,27 +117,31 @@ export const theme = {
     xl: '24px',
     xxl: '32px',
   },
-
-  // Glassmorphism preset
-  glass: {
-    background: 'rgba(26, 25, 38, 0.7)',
-    backdropFilter: 'blur(12px)',
-    border: '1px solid rgba(53, 52, 71, 0.5)',
-  },
 } as const;
 
-/** CSS variable injection (call once in App mount) */
-export function injectThemeVars() {
-  const root = document.documentElement;
-  root.style.setProperty('--bg-base', theme.bg.base);
-  root.style.setProperty('--bg-surface', theme.bg.surface);
-  root.style.setProperty('--bg-elevated', theme.bg.elevated);
-  root.style.setProperty('--text-primary', theme.text.primary);
-  root.style.setProperty('--text-secondary', theme.text.secondary);
-  root.style.setProperty('--text-muted', theme.text.muted);
-  root.style.setProperty('--accent', theme.accent.purple);
-  root.style.setProperty('--border', theme.border.default);
-  root.style.setProperty('--radius', theme.radius.md);
-  root.style.setProperty('--font-sans', theme.font.sans);
-  root.style.setProperty('--font-mono', theme.font.mono);
+/** Helper: create a glass panel style object */
+export function glassPanel(options?: { hover?: boolean; active?: boolean }): React.CSSProperties {
+  return {
+    background: options?.active ? theme.glass.bgActive : options?.hover ? theme.glass.bgHover : theme.glass.bg,
+    backdropFilter: theme.glass.backdrop,
+    WebkitBackdropFilter: theme.glass.backdrop,
+    border: `1px solid ${theme.glass.border}`,
+    borderRadius: theme.radius.md,
+    boxShadow: `${theme.shadow.sm}, ${theme.glass.specular}`,
+  } as React.CSSProperties;
+}
+
+/** Helper: create a glass button style */
+export function glassButton(active?: boolean): React.CSSProperties {
+  return {
+    background: active ? theme.glass.bgActive : theme.glass.bg,
+    backdropFilter: theme.glass.backdropLight,
+    WebkitBackdropFilter: theme.glass.backdropLight,
+    border: `1px solid ${active ? theme.glass.borderHover : theme.glass.border}`,
+    borderRadius: theme.radius.sm,
+    boxShadow: theme.glass.specular,
+    color: active ? theme.text.primary : theme.text.secondary,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  } as React.CSSProperties;
 }

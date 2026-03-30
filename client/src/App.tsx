@@ -12,7 +12,7 @@ import { ContextBubbles } from './components/visual/ContextBubbles';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SessionCatalog } from './components/SessionCatalog';
 import { simplifyEvent } from './utils/simplify';
-import { theme as t } from './utils/theme';
+import { theme as t, glassPanel } from './utils/theme';
 
 const isElectron = !!window.terminalSaddle;
 
@@ -155,18 +155,20 @@ export default function App() {
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', height: '100vh',
-        background: t.bg.base, color: t.text.primary, fontFamily: t.font.sans,
+        background: t.bgGradient, color: t.text.primary, fontFamily: t.font.sans,
       }}>
         <Header onScan={handleScan} loading={loading} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '0 0 6px' }}>
 
-          {/* ========== LEFT PANEL ========== */}
+          {/* ========== LEFT PANEL (glass) ========== */}
           {!leftCollapsed && (
             <div style={{
               width: effectiveLeftWidth, minWidth: effectiveLeftWidth, flexShrink: 0,
-              background: t.bg.base, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              borderRight: `1px solid ${t.border.subtle}`,
+              ...glassPanel(),
+              borderRadius: '0 16px 16px 0',
+              margin: '6px 0 0 6px',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}>
               {/* User name */}
               <div style={{ padding: '14px 16px 6px' }}>
@@ -185,10 +187,8 @@ export default function App() {
               {/* ACTIVE header */}
               <div style={{
                 margin: '4px 12px 8px',
-                padding: '8px 12px',
-                background: t.bg.surface,
-                border: `1px solid ${t.border.default}`,
-                borderRadius: t.radius.md,
+                padding: '10px 14px',
+                ...glassPanel({ active: true }),
               }}>
                 <div style={{
                   fontSize: 15, fontWeight: 800, color: t.text.primary,
@@ -219,15 +219,17 @@ export default function App() {
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                         padding: '10px 12px', marginBottom: 4,
-                        background: isActive ? t.bg.elevated : t.bg.surface,
-                        border: `1px solid ${isActive ? t.accent.purple + '50' : t.border.subtle}`,
+                        background: isActive ? t.glass.bgActive : t.glass.bg,
+                        backdropFilter: t.glass.backdropLight,
+                        border: `1px solid ${isActive ? t.glass.borderHover : t.glass.border}`,
                         borderRadius: t.radius.md,
+                        boxShadow: isActive ? `${t.shadow.sm}, ${t.glass.specular}` : t.glass.specular,
                         color: isActive ? t.text.primary : t.text.secondary,
                         cursor: 'pointer', textAlign: 'left',
-                        transition: 'all 0.12s ease',
+                        transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = t.bg.elevated; }}
-                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = t.bg.surface; }}
+                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = t.glass.bgHover; }}
+                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = t.glass.bg; }}
                     >
                       {/* Tab icon */}
                       <span style={{ fontSize: 14, flexShrink: 0 }}>
@@ -327,7 +329,9 @@ export default function App() {
             <div style={{
               width: effectiveRightWidth, minWidth: effectiveRightWidth, flexShrink: 0,
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              background: t.bg.base, borderLeft: `1px solid ${t.border.subtle}`,
+              ...glassPanel(),
+              borderRadius: '16px 0 0 16px',
+              margin: '6px 6px 0 0',
             }}>
               {/* Actions (top) */}
               <div style={{ flex: 1, overflow: 'hidden', borderBottom: `1px solid ${t.border.subtle}` }}>
@@ -341,7 +345,8 @@ export default function App() {
               {/* Animation area (bottom) — placeholder until assets arrive */}
               <div style={{
                 flex: 1, position: 'relative', overflow: 'hidden',
-                background: t.bg.surface,
+                background: t.glass.bg,
+                borderTop: `1px solid ${t.glass.border}`,
               }}>
                 {fileTree.length > 0 ? (
                   <>
