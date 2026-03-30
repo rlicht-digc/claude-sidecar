@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { VscTerminalBash, VscSourceControl, VscRefresh, VscStarFull, VscStarEmpty, VscArchive, VscHistory, VscEdit } from 'react-icons/vsc';
-import { TerminalSession } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { VscTerminalBash, VscSourceControl, VscRefresh, VscStarFull, VscStarEmpty, VscArchive, VscEdit, VscChevronDown, VscChevronRight } from 'react-icons/vsc';
+import { TerminalSession, ActivityItem } from '../types';
 import { useSidecarStore } from '../store/store';
+import { simplifyEvent, simplifyBatch } from '../utils/simplify';
+import { theme } from '../utils/theme';
 
 interface SessionMeta {
   id: string;
@@ -24,21 +27,10 @@ interface SessionCatalogProps {
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
-}
-
-/** Status light color based on last activity */
-function getStatusLight(terminal: TerminalSession): { color: string; label: string } {
-  // For external terminals, we infer activity from hook events
-  if (terminal.hasClaude && terminal.claudeEventCount > 0) {
-    // Check if we have a rough sense of recency from event count
-    // Since we poll every 5s, active sessions have growing counts
-    return { color: '#39d353', label: 'Active' }; // green
-  }
-  return { color: '#39d353', label: 'Active' }; // default green for detected terminals
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+  return `${Math.floor(diff / 86400000)}d`;
 }
 
 export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogProps) {
@@ -46,13 +38,14 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
   const [pastSessions, setPastSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [expandedCwd, setExpandedCwd] = useState<string | null>(null);
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const workingDirectory = useSidecarStore((s) => s.workingDirectory);
+  const activities = useSidecarStore((s) => s.activities);
   const eventCount = useSidecarStore((s) => s.eventCount);
   const lastEventCountRef = useRef(0);
-
-  // Track last-seen event counts per terminal to determine idle status
   const [terminalActivity, setTerminalActivity] = useState<Record<string, { lastCount: number; lastSeen: number }>>({});
 
   const fetchTerminals = useCallback(async () => {
@@ -62,15 +55,13 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
       const data = await res.json();
       if (data.ok) {
         setTerminals(data.terminals);
-        // Update activity tracking
         const now = Date.now();
         setTerminalActivity((prev) => {
           const next = { ...prev };
           for (const t of data.terminals) {
-            const key = t.cwd;
-            const prevEntry = prev[key];
+            const prevEntry = prev[t.cwd];
             if (!prevEntry || t.claudeEventCount > prevEntry.lastCount) {
-              next[key] = { lastCount: t.claudeEventCount, lastSeen: now };
+              next[t.cwd] = { lastCount: t.claudeEventCount, lastSeen: now };
             }
           }
           return next;
@@ -83,33 +74,18 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
   const fetchPastSessions = useCallback(async () => {
     if (!window.terminalSaddle) return;
     try {
-      const sessions = await window.terminalSaddle.sessions.list({ archived: false });
-      setPastSessions(sessions.filter((s: SessionMeta) => s.status === 'closed'));
-    } catch {}
-  }, []);
-
-  const fetchArchivedSessions = useCallback(async () => {
-    if (!window.terminalSaddle) return;
-    try {
-      const sessions = await window.terminalSaddle.sessions.list({ archived: true });
-      setPastSessions((prev) => {
-        const closed = prev.filter((s) => !s.archived);
-        return [...closed, ...sessions];
-      });
+      const all = await window.terminalSaddle.sessions.list({});
+      setPastSessions(all);
     } catch {}
   }, []);
 
   useEffect(() => {
     fetchTerminals();
     fetchPastSessions();
-    const interval = setInterval(() => {
-      fetchTerminals();
-      fetchPastSessions();
-    }, 5000);
+    const interval = setInterval(() => { fetchTerminals(); fetchPastSessions(); }, 5000);
     return () => clearInterval(interval);
   }, [fetchTerminals, fetchPastSessions]);
 
-  // Hook-event-triggered refresh
   useEffect(() => {
     if (eventCount > lastEventCountRef.current + 2) {
       fetchTerminals();
@@ -117,153 +93,275 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
     }
   }, [eventCount, fetchTerminals]);
 
-  useEffect(() => {
-    if (showArchived) fetchArchivedSessions();
-  }, [showArchived, fetchArchivedSessions]);
-
   const handleStar = async (id: string, starred: boolean) => {
     if (!window.terminalSaddle) return;
     await window.terminalSaddle.sessions.star(id, starred);
     fetchPastSessions();
   };
-
   const handleArchive = async (id: string) => {
     if (!window.terminalSaddle) return;
     await window.terminalSaddle.sessions.archive(id);
     fetchPastSessions();
   };
-
   const handleRename = async (id: string, name: string) => {
     if (!window.terminalSaddle) return;
     await window.terminalSaddle.sessions.rename(id, name.trim());
     setRenamingId(null);
-    setRenameValue('');
     fetchPastSessions();
   };
 
-  const startRename = (id: string, currentName: string) => {
-    setRenamingId(id);
-    setRenameValue(currentName);
-  };
-
-  /** Get status light for a terminal based on activity tracking */
-  function getTerminalStatusLight(t: TerminalSession): { color: string; glow: string; label: string } {
-    const activity = terminalActivity[t.cwd];
-    if (!activity) return { color: '#39d353', glow: '0 0 6px #39d353', label: 'Active' };
-
-    const minutesSinceActivity = (Date.now() - activity.lastSeen) / 60000;
-
-    if (minutesSinceActivity < 10) {
-      return { color: '#39d353', glow: '0 0 6px #39d353', label: 'Active' }; // green
-    } else if (minutesSinceActivity < 20) {
-      return { color: '#58a6ff', glow: '0 0 6px #58a6ff', label: 'Idle' }; // blue
-    } else {
-      return { color: '#8b949e', glow: '0 0 4px #8b949e', label: 'Inactive' }; // white/gray
-    }
+  function getStatusLight(cwd: string): { color: string; label: string } {
+    const activity = terminalActivity[cwd];
+    if (!activity) return { color: theme.status.active, label: 'Active' };
+    const mins = (Date.now() - activity.lastSeen) / 60000;
+    if (mins < 10) return { color: theme.status.active, label: 'Active' };
+    if (mins < 20) return { color: theme.status.idle, label: 'Idle' };
+    return { color: theme.status.inactive, label: 'Inactive' };
   }
 
-  const starredSessions = pastSessions.filter((s) => s.starred && !s.archived);
-  const closedSessions = pastSessions.filter((s) => !s.starred && !s.archived);
+  // Get simplified description of what's happening for a given cwd
+  function getActivityDescription(cwd: string): string {
+    const relevant = activities.filter((a) => a.path?.startsWith(cwd)).slice(0, 5);
+    if (relevant.length === 0) return 'No recent activity';
+    return simplifyBatch(relevant.map((a) => ({ type: a.type, data: { path: a.path } })));
+  }
+
+  // Hovered tab description (simplified)
+  function getHoveredDescription(): string | null {
+    if (!hoveredTab) return null;
+    const recent = activities.filter((a) => a.path?.startsWith(hoveredTab!)).slice(0, 3);
+    if (recent.length === 0) return 'No recent activity in this session';
+    return recent.map((a) => simplifyEvent(a.type, { path: a.path })).join('\n');
+  }
+
+  const closedSessions = pastSessions.filter((s) => s.status === 'closed' && !s.archived);
   const archivedSessions = pastSessions.filter((s) => s.archived);
+
+  const t = theme;
 
   return (
     <div style={{
-      width: '100%', height: '100%', background: '#0d1117',
+      width: '100%', height: '100%', background: t.bg.base,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      fontFamily: t.font.sans,
     }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 12px 8px', borderBottom: '1px solid #21262d', flexShrink: 0,
+        padding: '14px 16px 10px', flexShrink: 0,
       }}>
-        <span style={{ fontSize: 11, color: '#e6edf3', fontWeight: 700, letterSpacing: '-0.01em' }}>
+        <span style={{ fontSize: 13, color: t.text.primary, fontWeight: 700, letterSpacing: '-0.02em' }}>
           Sessions
         </span>
         <button onClick={() => { fetchTerminals(); fetchPastSessions(); }} disabled={loading}
-          style={{ background: 'transparent', border: 'none', color: '#484f58', cursor: 'pointer', padding: 2, display: 'flex' }}>
-          <VscRefresh style={{ fontSize: 12, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+          style={{ background: 'transparent', border: 'none', color: t.text.muted, cursor: 'pointer', padding: 4, borderRadius: t.radius.sm, display: 'flex' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = t.bg.elevated; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <VscRefresh style={{ fontSize: 13, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
         </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+      {/* Scrollable session list (top 2/3) */}
+      <div style={{ flex: 2, overflowY: 'auto', padding: '0 8px' }}>
 
-        {/* === ACTIVE: Detected terminals with status lights === */}
+        {/* === ACTIVE SESSIONS === */}
         {terminals.length > 0 && (
-          <>
-            <SectionHeader label="Active" count={terminals.length} light="#39d353" />
-            {terminals.map((t) => {
-              const status = getTerminalStatusLight(t);
+          <div style={{ marginBottom: 8 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
+              fontSize: 11, fontWeight: 700, color: t.text.primary,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: t.status.active, boxShadow: t.shadow.glow(t.status.active),
+              }} />
+              Active
+              <span style={{ fontSize: 10, color: t.text.muted, fontWeight: 400 }}>
+                {terminals.length} window{terminals.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {terminals.map((term) => {
+              const status = getStatusLight(term.cwd);
+              const isExpanded = expandedCwd === term.cwd;
+
               return (
-                <ExternalSessionRow
-                  key={t.cwd}
-                  terminal={t}
-                  status={status}
-                  isActive={workingDirectory === t.cwd}
-                  onAdopt={() => onOpenTab(t.cwd)}
-                />
+                <div key={term.cwd} style={{ marginBottom: 2 }}>
+                  {/* Session card */}
+                  <button
+                    onClick={() => setExpandedCwd(isExpanded ? null : term.cwd)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '8px 10px', background: isExpanded ? t.bg.elevated : t.bg.surface,
+                      border: `1px solid ${isExpanded ? t.border.hover : t.border.subtle}`,
+                      borderRadius: t.radius.md, color: t.text.primary,
+                      cursor: 'pointer', fontSize: 12, textAlign: 'left',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = t.bg.elevated; }}
+                    onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = t.bg.surface; }}
+                  >
+                    <span style={{
+                      width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                      background: status.color, boxShadow: t.shadow.glow(status.color),
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {term.dirName}
+                        {term.hasClaude && (
+                          <span style={{
+                            fontSize: 8, background: `${t.agent.claude}20`, color: t.agent.claude,
+                            padding: '1px 5px', borderRadius: t.radius.full, fontWeight: 600, marginLeft: 6,
+                          }}>AI</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 10, color: t.text.muted, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <span>{term.shell}</span>
+                        {term.claudeEventCount > 0 && <><span>·</span><span>{term.claudeEventCount} actions</span></>}
+                        {term.isGitRepo && term.gitBranch && (
+                          <><span>·</span><VscSourceControl style={{ fontSize: 9 }} /><span>{term.gitBranch}</span></>
+                        )}
+                      </div>
+                    </div>
+                    {isExpanded ? <VscChevronDown style={{ fontSize: 12, color: t.text.muted }} /> : <VscChevronRight style={{ fontSize: 12, color: t.text.muted }} />}
+                  </button>
+
+                  {/* Expanded: tab dropdown */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        style={{ overflow: 'hidden', marginLeft: 16, marginTop: 2 }}
+                      >
+                        <button
+                          onClick={() => onOpenTab(term.cwd)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                            padding: '6px 10px', background: 'transparent',
+                            border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.sm,
+                            color: t.text.secondary, cursor: 'pointer', fontSize: 11, textAlign: 'left',
+                            transition: 'all 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = t.bg.elevated; e.currentTarget.style.borderColor = t.accent.purple + '60'; setHoveredTab(term.cwd); }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = t.border.subtle; setHoveredTab(null); }}
+                        >
+                          <VscTerminalBash style={{ fontSize: 12, color: t.accent.purple }} />
+                          <span>Open in Terminal Saddle</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
-          </>
+          </div>
         )}
 
-        {/* === STARRED === */}
-        {starredSessions.length > 0 && (
-          <>
-            <SectionHeader label="Starred" count={starredSessions.length} light="#d29922" />
-            {starredSessions.map((s) => (
-              <PastSessionRow key={s.id} session={s}
-                onRestore={onRestoreSession} onStar={handleStar}
-                onArchive={handleArchive} onStartRename={startRename}
-                renamingId={renamingId} renameValue={renameValue}
-                setRenameValue={setRenameValue} onRename={handleRename}
-              />
-            ))}
-          </>
-        )}
-
-        {/* === RECENT (closed, restorable) === */}
+        {/* === RECENT (closed) === */}
         {closedSessions.length > 0 && (
-          <>
-            <SectionHeader label="Recent" count={closedSessions.length} />
-            {closedSessions.slice(0, 20).map((s) => (
-              <PastSessionRow key={s.id} session={s}
-                onRestore={onRestoreSession} onStar={handleStar}
-                onArchive={handleArchive} onStartRename={startRename}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
+              fontSize: 11, fontWeight: 700, color: t.text.primary,
+            }}>
+              Recent
+              <span style={{ fontSize: 10, color: t.text.muted, fontWeight: 400 }}>({closedSessions.length})</span>
+            </div>
+            {closedSessions.slice(0, 15).map((s) => (
+              <PastRow key={s.id} session={s} theme={t} onRestore={onRestoreSession}
+                onStar={handleStar} onArchive={handleArchive}
                 renamingId={renamingId} renameValue={renameValue}
                 setRenameValue={setRenameValue} onRename={handleRename}
+                onStartRename={(id, name) => { setRenamingId(id); setRenameValue(name); }}
               />
             ))}
-          </>
+          </div>
         )}
 
         {/* === ARCHIVED === */}
-        <div
+        <button
           onClick={() => setShowArchived(!showArchived)}
           style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-            cursor: 'pointer', fontSize: 11, color: '#7d8590', fontWeight: 700,
-            userSelect: 'none', borderTop: '1px solid #21262d', marginTop: 4,
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            padding: '8px 8px', background: 'transparent', border: 'none',
+            cursor: 'pointer', fontSize: 11, fontWeight: 700, color: t.text.secondary,
+            textAlign: 'left',
           }}
         >
           <VscArchive style={{ fontSize: 11 }} />
-          <span>Archived</span>
-          {archivedSessions.length > 0 && (
-            <span style={{ fontSize: 9, color: '#484f58', fontWeight: 400 }}>({archivedSessions.length})</span>
-          )}
+          Archived
+          {archivedSessions.length > 0 && <span style={{ fontSize: 10, fontWeight: 400, color: t.text.muted }}>({archivedSessions.length})</span>}
           <span style={{ marginLeft: 'auto', fontSize: 10 }}>{showArchived ? '▾' : '▸'}</span>
-        </div>
-        {showArchived && archivedSessions.map((s) => (
-          <PastSessionRow key={s.id} session={s}
-            onRestore={onRestoreSession} onStar={handleStar}
-            onArchive={handleArchive} onStartRename={startRename}
-            renamingId={renamingId} renameValue={renameValue}
-            setRenameValue={setRenameValue} onRename={handleRename}
-          />
-        ))}
+        </button>
+        <AnimatePresence>
+          {showArchived && archivedSessions.map((s) => (
+            <PastRow key={s.id} session={s} theme={t} onRestore={onRestoreSession}
+              onStar={handleStar} onArchive={handleArchive}
+              renamingId={renamingId} renameValue={renameValue}
+              setRenameValue={setRenameValue} onRename={handleRename}
+              onStartRename={(id, name) => { setRenamingId(id); setRenameValue(name); }}
+            />
+          ))}
+        </AnimatePresence>
 
         {terminals.length === 0 && pastSessions.length === 0 && !loading && (
-          <div style={{ padding: '16px 12px', fontSize: 11, color: '#484f58', textAlign: 'center' }}>
-            No sessions detected
+          <div style={{ padding: 20, fontSize: 12, color: t.text.muted, textAlign: 'center' }}>
+            No sessions yet
+          </div>
+        )}
+      </div>
+
+      {/* === BOTTOM 1/3: Live activity description === */}
+      <div style={{
+        flex: 1, minHeight: 120, maxHeight: 200,
+        borderTop: `1px solid ${t.border.subtle}`,
+        background: t.bg.surface, padding: '12px 14px',
+        display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden',
+      }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: t.text.secondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {hoveredTab ? 'Session Activity' : 'Live Activity'}
+        </div>
+
+        {hoveredTab ? (
+          // Show activity for the hovered session
+          <div style={{ fontSize: 12, color: t.text.primary, lineHeight: 1.6 }}>
+            {getHoveredDescription()?.split('\n').map((line, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: t.accent.purple, flexShrink: 0 }} />
+                <span>{line}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Show latest activity across all sessions
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto' }}>
+            {activities.slice(0, 6).map((a, i) => (
+              <motion.div
+                key={a.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: i * 0.03 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}
+              >
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                  background: a.color || t.accent.purple,
+                }} />
+                <span style={{ color: t.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {simplifyEvent(a.type, { path: a.path })}
+                </span>
+                <span style={{ fontSize: 9, color: t.text.muted, flexShrink: 0 }}>
+                  {timeAgo(new Date(a.timestamp).toISOString())}
+                </span>
+              </motion.div>
+            ))}
+            {activities.length === 0 && (
+              <span style={{ fontSize: 12, color: t.text.muted }}>Waiting for activity...</span>
+            )}
           </div>
         )}
       </div>
@@ -273,193 +371,87 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
   );
 }
 
-function SectionHeader({ label, count, light }: { label: string; count: number; light?: string }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '8px 12px 4px', fontSize: 11, fontWeight: 700,
-      color: '#e6edf3',
-    }}>
-      {light && (
-        <span style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: light, boxShadow: `0 0 6px ${light}`, flexShrink: 0,
-        }} />
-      )}
-      <span>{label}</span>
-      <span style={{ fontSize: 9, color: '#484f58', fontWeight: 400 }}>({count})</span>
-    </div>
-  );
-}
-
-function ExternalSessionRow({ terminal: t, status, isActive, onAdopt }: {
-  terminal: TerminalSession;
-  status: { color: string; glow: string; label: string };
-  isActive: boolean;
-  onAdopt: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <button
-      onClick={onAdopt}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={`${t.cwd}\nStatus: ${status.label}\nClick to open terminal here`}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-        padding: '6px 12px', background: isActive ? '#1f2937' : hovered ? '#161b22' : 'transparent',
-        border: 'none', borderLeft: isActive ? '2px solid #58a6ff' : '2px solid transparent',
-        color: isActive ? '#e6edf3' : '#8b949e', cursor: 'pointer', fontSize: 12, textAlign: 'left',
-      }}
-    >
-      {/* Status light */}
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-        background: status.color, boxShadow: status.glow,
-      }} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{
-            fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            fontFamily: "'SF Mono', Monaco, Consolas, monospace", fontSize: 11, color: '#e6edf3',
-          }}>
-            {t.dirName}
-          </span>
-          {t.hasClaude && (
-            <span style={{
-              fontSize: 7, background: '#da775620', color: '#da7756',
-              padding: '0 3px', borderRadius: 3, fontWeight: 600,
-            }}>AI</span>
-          )}
-        </div>
-        {/* Sub-info line */}
-        <div style={{ fontSize: 9, color: '#484f58', marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <VscTerminalBash style={{ fontSize: 9 }} />
-          <span>{t.shell}</span>
-          {t.claudeEventCount > 0 && (
-            <>
-              <span>·</span>
-              <span>{t.claudeEventCount} calls</span>
-            </>
-          )}
-          {t.isGitRepo && t.gitBranch && (
-            <>
-              <span>·</span>
-              <VscSourceControl style={{ fontSize: 8 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.gitBranch}</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Adopt hint on hover */}
-      {hovered && !isActive && (
-        <span style={{
-          fontSize: 8, color: '#58a6ff', background: '#58a6ff15',
-          padding: '1px 5px', borderRadius: 3, fontWeight: 600, flexShrink: 0,
-        }}>
-          OPEN
-        </span>
-      )}
-    </button>
-  );
-}
-
-function PastSessionRow({ session: s, onRestore, onStar, onArchive, onStartRename, renamingId, renameValue, setRenameValue, onRename }: {
-  session: SessionMeta;
+function PastRow({ session: s, theme: t, onRestore, onStar, onArchive, onStartRename, renamingId, renameValue, setRenameValue, onRename }: {
+  session: SessionMeta; theme: typeof theme;
   onRestore: (s: SessionMeta) => void;
   onStar: (id: string, starred: boolean) => void;
   onArchive: (id: string) => void;
   onStartRename: (id: string, name: string) => void;
-  renamingId: string | null;
-  renameValue: string;
+  renamingId: string | null; renameValue: string;
   setRenameValue: (v: string) => void;
   onRename: (id: string, name: string) => void;
 }) {
-  const [showActions, setShowActions] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const isRenaming = renamingId === s.id;
 
   return (
     <div
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-      style={{ position: 'relative' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ position: 'relative', marginBottom: 1 }}
     >
       <button
         onClick={() => !isRenaming && onRestore(s)}
-        title={`${s.cwd}\nLast active: ${timeAgo(s.lastActiveAt)}\nClick to restore`}
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-          padding: '6px 12px', background: 'transparent', border: 'none',
-          borderLeft: '2px solid transparent', color: '#7d8590',
-          cursor: isRenaming ? 'default' : 'pointer', fontSize: 12, textAlign: 'left',
+          padding: '6px 10px', background: hovered ? t.bg.elevated : 'transparent',
+          border: 'none', borderRadius: t.radius.sm,
+          color: t.text.secondary, cursor: isRenaming ? 'default' : 'pointer',
+          fontSize: 12, textAlign: 'left', transition: 'background 0.12s ease',
         }}
-        onMouseEnter={(e) => { if (!isRenaming) e.currentTarget.style.background = '#161b22'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
-        <VscHistory style={{ fontSize: 11, flexShrink: 0, opacity: 0.5 }} />
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ fontSize: 10, opacity: 0.4 }}>↩</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {isRenaming ? (
-            <form onSubmit={(e) => { e.preventDefault(); onRename(s.id, renameValue); }} style={{ display: 'flex', gap: 4 }}>
-              <input
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                autoFocus
-                onBlur={() => onRename(s.id, renameValue)}
-                onKeyDown={(e) => { if (e.key === 'Escape') { setRenameValue(s.name); onRename(s.id, s.name); } }}
+            <form onSubmit={(e) => { e.preventDefault(); onRename(s.id, renameValue); }}>
+              <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+                autoFocus onBlur={() => onRename(s.id, renameValue)}
+                onKeyDown={(e) => { if (e.key === 'Escape') onRename(s.id, s.name); }}
                 style={{
-                  background: '#0d1117', border: '1px solid #58a6ff', borderRadius: 3,
-                  color: '#e6edf3', fontSize: 11, padding: '1px 4px', width: '100%',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace", outline: 'none',
+                  background: t.bg.base, border: `1px solid ${t.accent.purple}80`, borderRadius: t.radius.sm,
+                  color: t.text.primary, fontSize: 11, padding: '2px 6px', width: '100%',
+                  fontFamily: t.font.sans, outline: 'none',
                 }}
               />
             </form>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{
-                  fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace", fontSize: 11,
-                }}>
+                <span style={{ fontSize: 11, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.name}
                 </span>
-                {s.starred && <VscStarFull style={{ fontSize: 9, color: '#d29922', flexShrink: 0 }} />}
+                {s.starred && <VscStarFull style={{ fontSize: 9, color: t.accent.yellow }} />}
+                <span style={{ fontSize: 9, color: t.text.muted, marginLeft: 'auto' }}>{timeAgo(s.lastActiveAt)}</span>
               </div>
-              <div style={{ fontSize: 9, color: '#484f58', marginTop: 1 }}>
-                {timeAgo(s.lastActiveAt)} {s.eventCount > 0 ? `· ${s.eventCount} events` : ''}
-              </div>
+              {s.lastOutputPreview && (
+                <div style={{
+                  fontSize: 10, color: t.text.muted, marginTop: 1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7,
+                }}>
+                  {s.lastOutputPreview.slice(0, 50)}
+                </div>
+              )}
             </>
           )}
         </div>
       </button>
 
-      {/* Hover actions */}
-      {showActions && !isRenaming && (
+      {hovered && !isRenaming && (
         <div style={{
-          position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-          display: 'flex', gap: 1, background: '#161b22', borderRadius: 4, padding: 2,
-          border: '1px solid #30363d',
+          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          display: 'flex', gap: 2, background: t.bg.overlay, borderRadius: t.radius.sm,
+          padding: 2, border: `1px solid ${t.border.default}`, boxShadow: t.shadow.sm,
         }}>
-          <ActionBtn
-            icon={<VscEdit style={{ fontSize: 10 }} />}
-            title="Rename"
-            color="#7d8590"
-            onClick={(e) => { e.stopPropagation(); onStartRename(s.id, s.name); }}
-          />
-          <ActionBtn
+          <HoverBtn icon={<VscEdit style={{ fontSize: 10 }} />} title="Rename" color={t.text.muted}
+            onClick={(e) => { e.stopPropagation(); onStartRename(s.id, s.name); }} bg={t.bg.elevated} />
+          <HoverBtn
             icon={s.starred ? <VscStarFull style={{ fontSize: 10 }} /> : <VscStarEmpty style={{ fontSize: 10 }} />}
-            title={s.starred ? 'Unstar' : 'Star'}
-            color={s.starred ? '#d29922' : '#484f58'}
-            onClick={(e) => { e.stopPropagation(); onStar(s.id, !s.starred); }}
+            title={s.starred ? 'Unstar' : 'Star'} color={s.starred ? t.accent.yellow : t.text.muted}
+            onClick={(e) => { e.stopPropagation(); onStar(s.id, !s.starred); }} bg={t.bg.elevated}
           />
           {!s.archived && (
-            <ActionBtn
-              icon={<VscArchive style={{ fontSize: 10 }} />}
-              title="Archive"
-              color="#484f58"
-              onClick={(e) => { e.stopPropagation(); onArchive(s.id); }}
-            />
+            <HoverBtn icon={<VscArchive style={{ fontSize: 10 }} />} title="Archive" color={t.text.muted}
+              onClick={(e) => { e.stopPropagation(); onArchive(s.id); }} bg={t.bg.elevated} />
           )}
         </div>
       )}
@@ -467,14 +459,14 @@ function PastSessionRow({ session: s, onRestore, onStar, onArchive, onStartRenam
   );
 }
 
-function ActionBtn({ icon, title, color, onClick }: {
-  icon: React.ReactNode; title: string; color: string;
+function HoverBtn({ icon, title, color, onClick, bg }: {
+  icon: React.ReactNode; title: string; color: string; bg: string;
   onClick: (e: React.MouseEvent) => void;
 }) {
   return (
     <button onClick={onClick} title={title}
-      style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 3, display: 'flex', borderRadius: 3 }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = '#21262d'; }}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 3, display: 'flex', borderRadius: 4 }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = bg; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
     >
       {icon}
