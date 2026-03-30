@@ -224,7 +224,7 @@ export default function App() {
               </div>
 
               {/* Terminal tabs (Chrome-style) */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px', minHeight: 0 }}>
                 {tabs.map((tab) => {
                   const isActive = tab.id === activeTabId;
                   const activity = getTabActivity(tab.cwd);

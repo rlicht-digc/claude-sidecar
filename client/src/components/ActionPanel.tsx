@@ -154,7 +154,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 10, fontFamily: t.font.sans }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 10, fontFamily: t.font.sans, minHeight: 0 }}>
       {/* Header with back button */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10, flexShrink: 0, minHeight: 24 }}>
         {view !== 'home' && (
@@ -175,7 +175,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
         {/* ===== HOME: 3 workflow buttons ===== */}
         {view === 'home' && (
           <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {(Object.entries(WORKFLOWS) as [Workflow, typeof WORKFLOWS.work][]).map(([key, wf]) => (
               <button key={key} onClick={() => handleWorkflow(key)}
                 style={{ ...glass(), padding: '16px 14px', textAlign: 'left', width: '100%' }}
@@ -195,7 +195,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
         {/* ===== CLI SELECT ===== */}
         {view === 'cli-select' && (
           <motion.div key="cli" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto', minHeight: 0 }}>
             <div style={{ fontSize: 11, color: t.text.muted, fontWeight: 600, marginBottom: 4 }}>Choose your AI</div>
             {clis.map((cli) => {
               const color = cli.command === 'claude' ? t.agent.claude : cli.command === 'codex' ? t.agent.codex : t.accent.purple;
@@ -227,7 +227,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
         {/* ===== REPO SELECT ===== */}
         {view === 'repo-select' && (
           <motion.div key="repo" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto', minHeight: 0 }}>
             <div style={{ fontSize: 11, color: t.text.muted, fontWeight: 600 }}>Point at a repo</div>
             {knownRepos.map((repo) => (
               <button key={repo} onClick={() => { setSelectedRepo(repo); handleSelectRepo(); }}
@@ -248,7 +248,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
         {/* ===== OPTIONS (Review & Research / Quick Look) ===== */}
         {view === 'options' && (
           <motion.div key="options" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflow: 'auto' }}>
+            style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {(workflow === 'review' ? REVIEW_OPTIONS : LOOK_OPTIONS).map((opt) => (
               <button key={opt.id} onClick={() => launch(opt.prompt, opt.label)}
                 style={{ ...glass(), padding: '12px', textAlign: 'left', width: '100%' }}
@@ -271,7 +271,7 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
         {/* ===== CUSTOM PROMPT ===== */}
         {view === 'custom-prompt' && (
           <motion.div key="custom" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+            style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {/* Context line */}
             <div style={{ fontSize: 11, color: t.text.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
               {selectedCli && (

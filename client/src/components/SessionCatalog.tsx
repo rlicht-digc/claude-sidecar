@@ -164,7 +164,7 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
       </div>
 
       {/* Scrollable session list (top 2/3) */}
-      <div style={{ flex: 2, overflowY: 'auto', padding: '0 8px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px', minHeight: 0 }}>
 
         {/* === ACTIVE SESSIONS === */}
         {terminals.length > 0 && (
