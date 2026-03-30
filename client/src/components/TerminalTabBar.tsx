@@ -7,6 +7,8 @@ export interface TabInfo {
   cwd: string;
   /** If set, this tab is an action-agent tab that gets reused */
   actionAgent?: 'claude' | 'codex';
+  /** If true, this is a watch-only activity view (no PTY) */
+  isWatch?: boolean;
 }
 
 interface TerminalTabBarProps {

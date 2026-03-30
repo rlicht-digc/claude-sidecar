@@ -23,6 +23,7 @@ interface SessionMeta {
 interface SessionCatalogProps {
   onOpenTab: (cwd: string) => void;
   onRestoreSession: (session: SessionMeta) => void;
+  onWatchSession?: (cwd: string) => void;
 }
 
 function timeAgo(dateStr: string): string {
@@ -33,7 +34,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diff / 86400000)}d`;
 }
 
-export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogProps) {
+export function SessionCatalog({ onOpenTab, onRestoreSession, onWatchSession }: SessionCatalogProps) {
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [pastSessions, setPastSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
@@ -238,21 +239,40 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
                         transition={{ duration: 0.2 }}
                         style={{ overflow: 'hidden', marginLeft: 16, marginTop: 2 }}
                       >
-                        <button
-                          onClick={() => onOpenTab(term.cwd)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                            padding: '6px 10px', background: 'transparent',
-                            border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.sm,
-                            color: t.text.secondary, cursor: 'pointer', fontSize: 11, textAlign: 'left',
-                            transition: 'all 0.12s ease',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = t.bg.elevated; e.currentTarget.style.borderColor = t.accent.purple + '60'; setHoveredTab(term.cwd); }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = t.border.subtle; setHoveredTab(null); }}
-                        >
-                          <VscTerminalBash style={{ fontSize: 12, color: t.accent.purple }} />
-                          <span>Open in Terminal Saddle</span>
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <button
+                            onClick={() => onOpenTab(term.cwd)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                              padding: '6px 10px', background: 'transparent',
+                              border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.sm,
+                              color: t.text.secondary, cursor: 'pointer', fontSize: 11, textAlign: 'left',
+                              transition: 'all 0.12s ease',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = t.bg.elevated; e.currentTarget.style.borderColor = t.accent.purple + '60'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = t.border.subtle; }}
+                          >
+                            <VscTerminalBash style={{ fontSize: 12, color: t.accent.purple }} />
+                            <span>Open in Terminal Saddle</span>
+                          </button>
+                          {onWatchSession && term.hasClaude && (
+                            <button
+                              onClick={() => onWatchSession(term.cwd)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                                padding: '6px 10px', background: 'transparent',
+                                border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.sm,
+                                color: t.text.secondary, cursor: 'pointer', fontSize: 11, textAlign: 'left',
+                                transition: 'all 0.12s ease',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = t.bg.elevated; e.currentTarget.style.borderColor = t.accent.cyan + '60'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = t.border.subtle; }}
+                            >
+                              <span style={{ fontSize: 12 }}>👁</span>
+                              <span>Watch Activity</span>
+                            </button>
+                          )}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>

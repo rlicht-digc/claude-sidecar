@@ -10,6 +10,7 @@ import { ActionPanel } from './components/ActionPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { StatusBar } from './components/StatusBar';
 import { PowerLauncher } from './components/PowerLauncher';
+import { ActivityView } from './components/ActivityView';
 import { LiveActivity } from './components/LiveActivity';
 import { WorkspaceScene } from './components/visual/WorkspaceScene';
 import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
@@ -28,6 +29,8 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
+
+  const [splitTabId, setSplitTabId] = useState<string | null>(null); // PBP second tab
 
   // Panel widths
   const [leftWidth, setLeftWidth] = useState(280);
@@ -145,6 +148,29 @@ export default function App() {
     } catch {}
   }, [workingDirectory]);
 
+  // Create a watch-only tab for an external terminal session
+  const handleWatchSession = useCallback((cwd: string) => {
+    const repoName = cwd.split('/').pop() || 'Watch';
+    const watchId = `watch-${cwd}`;
+    // Don't duplicate
+    if (tabs.find((t) => t.id === watchId)) {
+      setActiveTabId(watchId);
+      return;
+    }
+    const newTab: TabInfo = { id: watchId, sessionId: '', label: `👁 ${repoName}`, cwd, isWatch: true };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(watchId);
+  }, [tabs]);
+
+  // Toggle split view: put current active tab in split
+  const handleToggleSplit = useCallback((tabId: string) => {
+    if (splitTabId === tabId) {
+      setSplitTabId(null); // un-split
+    } else {
+      setSplitTabId(tabId);
+    }
+  }, [splitTabId]);
+
   const handleInjectCurrent = useCallback((prompt: string) => {
     if (!window.terminalSaddle || !activeTabId) return;
     window.terminalSaddle.terminal.write(activeTabId, prompt + '\n');
@@ -251,7 +277,7 @@ export default function App() {
                     >
                       {/* Tab icon */}
                       <span style={{ fontSize: 14, flexShrink: 0 }}>
-                        {tab.actionAgent === 'claude' ? '✦' : tab.actionAgent === 'codex' ? '◈' : '▸'}
+                        {tab.isWatch ? '👁' : tab.actionAgent === 'claude' ? '✦' : tab.actionAgent === 'codex' ? '◈' : '▸'}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -266,6 +292,19 @@ export default function App() {
                           </div>
                         )}
                       </div>
+                      {/* Split view toggle */}
+                      <span
+                        onClick={(e) => { e.stopPropagation(); handleToggleSplit(tab.id); }}
+                        title={splitTabId === tab.id ? 'Exit split view' : 'Split view'}
+                        style={{
+                          fontSize: 10, color: splitTabId === tab.id ? t.accent.purple : t.text.muted,
+                          cursor: 'pointer', padding: '0 2px', borderRadius: 4, lineHeight: 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = t.accent.purple; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = splitTabId === tab.id ? t.accent.purple : t.text.muted; }}
+                      >
+                        ⧉
+                      </span>
                       {/* Close button */}
                       <span
                         onClick={(e) => { e.stopPropagation(); handleCloseTab(tab.id); }}
@@ -309,7 +348,7 @@ export default function App() {
 
                 {/* Detected external sessions */}
                 <div style={{ marginTop: 12, paddingBottom: 140 /* space for anchored live activity */ }}>
-                  <SessionCatalog onOpenTab={(cwd) => handleNewTab(cwd)} onRestoreSession={handleRestoreSession} />
+                  <SessionCatalog onOpenTab={(cwd) => handleNewTab(cwd)} onRestoreSession={handleRestoreSession} onWatchSession={handleWatchSession} />
                 </div>
               </div>
 
@@ -330,8 +369,29 @@ export default function App() {
                   onNewTerminal={() => handleNewTab()}
                   onLaunchCLI={handleLaunchBareCLI}
                 />
+              ) : splitTabId && splitTabId !== activeTabId ? (
+                /* ===== PBP Split View ===== */
+                <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                  <div style={{ flex: 1, overflow: 'hidden', borderRight: `1px solid ${t.glass.border}` }}>
+                    {tabs.map((tab) => tab.isWatch ? (
+                      <ActivityView key={tab.id} filterCwd={tab.cwd} isActive={tab.id === activeTabId} />
+                    ) : (
+                      <Terminal key={tab.id} tabId={tab.id} isActive={tab.id === activeTabId} />
+                    ))}
+                  </div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    {tabs.map((tab) => tab.isWatch ? (
+                      <ActivityView key={`split-${tab.id}`} filterCwd={tab.cwd} isActive={tab.id === splitTabId} />
+                    ) : (
+                      <Terminal key={`split-${tab.id}`} tabId={tab.id} isActive={tab.id === splitTabId} />
+                    ))}
+                  </div>
+                </div>
               ) : (
-                tabs.map((tab) => (
+                /* ===== Normal single tab view ===== */
+                tabs.map((tab) => tab.isWatch ? (
+                  <ActivityView key={tab.id} filterCwd={tab.cwd} isActive={tab.id === activeTabId} />
+                ) : (
                   <Terminal key={tab.id} tabId={tab.id} isActive={tab.id === activeTabId} />
                 ))
               )}
