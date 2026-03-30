@@ -37,6 +37,7 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [pastSessions, setPastSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showRecent, setShowRecent] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [expandedCwd, setExpandedCwd] = useState<string | null>(null);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
@@ -261,24 +262,41 @@ export function SessionCatalog({ onOpenTab, onRestoreSession }: SessionCatalogPr
           </div>
         )}
 
-        {/* === RECENT (closed) === */}
+        {/* === RECENT (closed, collapsible) === */}
         {closedSessions.length > 0 && (
           <div style={{ marginBottom: 8 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
-              fontSize: 11, fontWeight: 700, color: t.text.primary,
-            }}>
+            <button
+              onClick={() => setShowRecent(!showRecent)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
+                fontSize: 11, fontWeight: 700, color: t.text.primary,
+                background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
+              }}
+            >
               Recent
               <span style={{ fontSize: 10, color: t.text.muted, fontWeight: 400 }}>({closedSessions.length})</span>
-            </div>
-            {closedSessions.slice(0, 15).map((s) => (
-              <PastRow key={s.id} session={s} theme={t} onRestore={onRestoreSession}
-                onStar={handleStar} onArchive={handleArchive}
-                renamingId={renamingId} renameValue={renameValue}
-                setRenameValue={setRenameValue} onRename={handleRename}
-                onStartRename={(id, name) => { setRenamingId(id); setRenameValue(name); }}
-              />
-            ))}
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: t.text.muted }}>{showRecent ? '▾' : '▸'}</span>
+            </button>
+            <AnimatePresence>
+              {showRecent && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  {closedSessions.slice(0, 15).map((s) => (
+                    <PastRow key={s.id} session={s} theme={t} onRestore={onRestoreSession}
+                      onStar={handleStar} onArchive={handleArchive}
+                      renamingId={renamingId} renameValue={renameValue}
+                      setRenameValue={setRenameValue} onRename={handleRename}
+                      onStartRename={(id, name) => { setRenamingId(id); setRenameValue(name); }}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 
