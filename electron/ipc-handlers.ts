@@ -93,4 +93,30 @@ export function registerIpcHandlers({ ptyManager, sessionStore }: Deps) {
   ipcMain.handle('sessions:getTranscript', async (_event, id: string, options?: { tail?: number }) => {
     return sessionStore.getTranscript(id, options);
   });
+
+  // --- CLI detection ---
+  ipcMain.handle('system:detectCLIs', async () => {
+    const { execSync } = require('child_process');
+    const clis: Array<{ name: string; command: string; version: string; flag: string }> = [];
+
+    const checks = [
+      { name: 'Claude', command: 'claude', flag: '--dangerously-skip-permissions' },
+      { name: 'Codex', command: 'codex', flag: '--full-auto' },
+      { name: 'Aider', command: 'aider', flag: '' },
+      { name: 'Cursor', command: 'cursor', flag: '' },
+    ];
+
+    for (const cli of checks) {
+      try {
+        const version = execSync(`which ${cli.command} && ${cli.command} --version 2>/dev/null || echo unknown`, {
+          encoding: 'utf-8', timeout: 3000,
+        }).trim();
+        if (version && !version.includes('not found')) {
+          clis.push({ ...cli, version: version.split('\n').pop() || 'installed' });
+        }
+      } catch {}
+    }
+
+    return clis;
+  });
 }

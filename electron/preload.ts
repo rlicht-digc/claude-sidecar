@@ -55,6 +55,11 @@ contextBridge.exposeInMainWorld('terminalSaddle', {
       ipcRenderer.invoke('sessions:getTranscript', id, options),
   },
 
+  // System
+  system: {
+    detectCLIs: () => ipcRenderer.invoke('system:detectCLIs'),
+  },
+
   // Platform info
   platform: process.platform,
 });

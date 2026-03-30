@@ -20,6 +20,9 @@ export interface TerminalSaddleAPI {
     delete: (id: string) => Promise<void>;
     getTranscript: (id: string, options?: { tail?: number }) => Promise<string>;
   };
+  system: {
+    detectCLIs: () => Promise<Array<{ name: string; command: string; version: string; flag: string }>>;
+  };
   platform: string;
 }
 

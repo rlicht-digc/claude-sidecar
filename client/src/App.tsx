@@ -8,6 +8,7 @@ import { TabInfo } from './components/TerminalTabBar';
 import { ResizeHandle } from './components/ResizeHandle';
 import { ActionPanel } from './components/ActionPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { StatusBar } from './components/StatusBar';
 import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
 import { SessionCatalog } from './components/SessionCatalog';
 import { simplifyEvent } from './utils/simplify';
@@ -317,6 +318,9 @@ export default function App() {
                 ))
               )}
             </div>
+
+            {/* Live status bar */}
+            <StatusBar />
           </div>
 
           <ResizeHandle side="right" initialWidth={rightWidth} minWidth={240} maxWidth={500}
