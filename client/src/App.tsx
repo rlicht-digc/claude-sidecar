@@ -9,6 +9,7 @@ import { ResizeHandle } from './components/ResizeHandle';
 import { ActionPanel } from './components/ActionPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { StatusBar } from './components/StatusBar';
+import { PowerLauncher } from './components/PowerLauncher';
 import { LiveActivity } from './components/LiveActivity';
 import { WorkspaceScene } from './components/visual/WorkspaceScene';
 import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
@@ -129,6 +130,20 @@ export default function App() {
       }
     } catch {}
   }, [workingDirectory, tabs]);
+
+  // Launch a bare CLI session (from power button)
+  const handleLaunchBareCLI = useCallback(async (command: string, label: string, agent: 'claude' | 'codex') => {
+    if (!window.terminalSaddle) return;
+    try {
+      const cwd = workingDirectory || undefined;
+      const result = await window.terminalSaddle.terminal.create({ cwd });
+      const newTab: TabInfo = { id: result.tabId, sessionId: result.sessionId, label, cwd: cwd || '', actionAgent: agent };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(result.tabId);
+      // Wait for shell, then launch the CLI
+      setTimeout(() => window.terminalSaddle?.terminal.write(result.tabId, command + '\n'), 800);
+    } catch {}
+  }, [workingDirectory]);
 
   const handleInjectCurrent = useCallback((prompt: string) => {
     if (!window.terminalSaddle || !activeTabId) return;
@@ -311,13 +326,10 @@ export default function App() {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 300 }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               {tabs.length === 0 ? (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  height: '100%', gap: 16, color: t.text.muted,
-                }}>
-                  <span style={{ fontSize: 32, opacity: 0.3 }}>▸</span>
-                  <span style={{ fontSize: 14 }}>Open a terminal tab to get started</span>
-                </div>
+                <PowerLauncher
+                  onNewTerminal={() => handleNewTab()}
+                  onLaunchCLI={handleLaunchBareCLI}
+                />
               ) : (
                 tabs.map((tab) => (
                   <Terminal key={tab.id} tabId={tab.id} isActive={tab.id === activeTabId} />
