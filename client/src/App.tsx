@@ -7,9 +7,8 @@ import { Terminal } from './components/Terminal';
 import { TabInfo } from './components/TerminalTabBar';
 import { ResizeHandle } from './components/ResizeHandle';
 import { ActionPanel } from './components/ActionPanel';
-import { WorkspaceScene } from './components/visual/WorkspaceScene';
-import { ContextBubbles } from './components/visual/ContextBubbles';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
 import { SessionCatalog } from './components/SessionCatalog';
 import { simplifyEvent } from './utils/simplify';
 import { theme as t, glassPanel } from './utils/theme';
@@ -342,26 +341,24 @@ export default function App() {
                 />
               </div>
 
-              {/* Animation area (bottom) — placeholder until assets arrive */}
+              {/* Animation area (bottom) — BotAvatar driven by live events */}
               <div style={{
                 flex: 1, position: 'relative', overflow: 'hidden',
                 background: t.glass.bg,
                 borderTop: `1px solid ${t.glass.border}`,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               }}>
-                {fileTree.length > 0 ? (
-                  <>
-                    <WorkspaceScene />
-                    <ContextBubbles />
-                  </>
-                ) : (
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    height: '100%', color: t.text.muted, fontSize: 11, gap: 8,
-                  }}>
-                    <span style={{ fontSize: 24, opacity: 0.2 }}>◎</span>
-                    <span>Agent activity will appear here</span>
-                  </div>
-                )}
+                <BotAvatar
+                  state={activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
+                    ? eventToBotState(activities[0].type)
+                    : 'idle'}
+                  size={160}
+                />
+                <div style={{ fontSize: 11, color: t.text.muted, marginTop: 8, textAlign: 'center' }}>
+                  {activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
+                    ? simplifyEvent(activities[0].type, { path: activities[0].path })
+                    : 'Waiting for activity...'}
+                </div>
               </div>
             </div>
           )}
@@ -386,10 +383,9 @@ export default function App() {
             {fileTree.length === 0 && !loading ? (
               <WelcomeScreen onScan={handleScan} />
             ) : (
-              <>
-                <WorkspaceScene />
-                <ContextBubbles />
-              </>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <BotAvatar state="idle" size={200} />
+              </div>
             )}
           </div>
         </div>
