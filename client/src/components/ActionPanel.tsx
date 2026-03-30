@@ -1,221 +1,402 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ACTIONS, ActionDef, ActionVariant, AgentCLI, buildCommand, buildCurrentTerminalPrompt } from '../config/actions';
 import { useSidecarStore } from '../store/store';
 import { theme as t } from '../utils/theme';
 
 interface ActionPanelProps {
-  /** Launch action in a new or reused agent tab. Returns nothing if tab reuse. */
   onLaunchAgent: (command: string, label: string, agent: AgentCLI) => void;
-  /** Inject prompt directly into the active terminal tab */
   onInjectCurrent: (prompt: string) => void;
-  /** Whether there's an active terminal tab to inject into */
   hasActiveTab: boolean;
 }
 
-type Step = 'idle' | 'scope' | 'cli';
-
-const CATEGORY_ORDER = ['audit', 'research', 'dev'] as const;
-const CATEGORY_LABELS: Record<string, string> = { audit: 'Audit & Analyze', research: 'Research', dev: 'Development' };
+type View = 'grid' | 'expanded' | 'cli-select' | 'custom-prompt';
 
 export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: ActionPanelProps) {
-  const [step, setStep] = useState<Step>('idle');
+  const [view, setView] = useState<View>('grid');
   const [selectedAction, setSelectedAction] = useState<ActionDef | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ActionVariant | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentCLI | null>(null);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [selectedRepo, setSelectedRepo] = useState<string>('');
+  const [knownRepos, setKnownRepos] = useState<string[]>([]);
   const workingDirectory = useSidecarStore((s) => s.workingDirectory);
+  const activities = useSidecarStore((s) => s.activities);
 
-  const handleClickAction = (action: ActionDef) => {
-    if (action.hasScopes) {
-      setSelectedAction(action);
-      setStep('scope');
-    } else {
-      // No scope sub-menu — go straight to CLI selector with the single variant
-      const variant = Object.values(action.variants)[0]!;
-      setSelectedAction(action);
-      setSelectedVariant(variant);
-      setStep('cli');
+  // Collect known repos from activity paths
+  useEffect(() => {
+    const repos = new Set<string>();
+    for (const a of activities) {
+      if (a.path) {
+        const parts = a.path.split('/');
+        const userIdx = parts.indexOf('Users');
+        if (userIdx >= 0 && parts.length > userIdx + 2) {
+          const repoPath = parts.slice(0, userIdx + 3).join('/');
+          repos.add(repoPath);
+        }
+      }
     }
+    if (workingDirectory) repos.add(workingDirectory);
+    setKnownRepos(Array.from(repos).sort());
+  }, [activities, workingDirectory]);
+
+  const reset = () => {
+    setView('grid');
+    setSelectedAction(null);
+    setSelectedVariant(null);
+    setSelectedAgent(null);
+    setCustomPrompt('');
+    setSelectedRepo('');
   };
 
-  const handleSelectScope = (variant: ActionVariant) => {
-    if (variant.scope === 'current') {
-      // "Current Terminal" — inject directly, bypass CLI selection
-      const prompt = buildCurrentTerminalPrompt(variant);
-      onInjectCurrent(prompt);
+  const handleClickAction = (action: ActionDef) => {
+    setSelectedAction(action);
+    setSelectedRepo(workingDirectory || '');
+    setView('expanded');
+  };
+
+  const handleSelectVariant = (variant: ActionVariant) => {
+    if (variant.scope === 'current' && hasActiveTab) {
+      onInjectCurrent(buildCurrentTerminalPrompt(variant));
       reset();
       return;
     }
     setSelectedVariant(variant);
-    setStep('cli');
+    setView('cli-select');
   };
 
-  const handleSelectCLI = (agent: AgentCLI) => {
-    if (!selectedVariant || !selectedAction) return;
-    const cwd = workingDirectory || '~';
-    const command = buildCommand(selectedVariant, agent, cwd);
-    const label = `${selectedAction.label} (${agent})`;
-    onLaunchAgent(command, label, agent);
+  const handleSelectAgent = (agent: AgentCLI) => {
+    setSelectedAgent(agent);
+    // If there's a selected variant (preset), launch immediately
+    if (selectedVariant) {
+      const cwd = selectedRepo || workingDirectory || '~';
+      const command = buildCommand(selectedVariant, agent, cwd);
+      onLaunchAgent(command, `${selectedAction?.label} (${agent})`, agent);
+      reset();
+    }
+  };
+
+  const handleCustomPrompt = (agent: AgentCLI) => {
+    setSelectedAgent(agent);
+    setView('custom-prompt');
+  };
+
+  const handleLaunchCustom = () => {
+    if (!selectedAgent || !customPrompt.trim()) return;
+    const cwd = selectedRepo || workingDirectory || '~';
+    const escaped = customPrompt.replace(/'/g, "'\\''");
+    const cliCmd = selectedAgent === 'claude'
+      ? `cd "${cwd}" && claude --dangerously-skip-permissions -p '${escaped}'`
+      : `cd "${cwd}" && codex --full-auto '${escaped}'`;
+    onLaunchAgent(cliCmd, `Custom (${selectedAgent})`, selectedAgent);
     reset();
   };
 
-  const reset = () => {
-    setStep('idle');
-    setSelectedAction(null);
-    setSelectedVariant(null);
-  };
-
-  const grouped = CATEGORY_ORDER
-    .map((cat) => ({ category: cat, label: CATEGORY_LABELS[cat], actions: ACTIONS.filter((a) => a.category === cat) }))
-    .filter((g) => g.actions.length > 0);
+  // Glass button base style
+  const glassBtn = (active?: boolean): React.CSSProperties => ({
+    background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(12px)',
+    border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)'}`,
+    borderRadius: t.radius.md,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12), ${active ? '0 2px 8px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.15)'}`,
+    color: t.text.primary,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
+      padding: 10,
+    }}>
       {/* Header */}
-      <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid #21262d', flexShrink: 0 }}>
-        <span style={{ fontSize: 10, color: '#484f58', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-          Actions
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10, flexShrink: 0,
+      }}>
+        {view !== 'grid' && (
+          <button onClick={reset} style={{
+            ...glassBtn(), padding: '4px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            ← Back
+          </button>
+        )}
+        <span style={{
+          fontSize: 12, fontWeight: 700, color: t.text.primary,
+          marginLeft: view === 'grid' ? 0 : 'auto',
+        }}>
+          {view === 'grid' ? 'Quick Actions' : selectedAction?.label || 'Action'}
         </span>
       </div>
 
-      {/* === STEP: Scope sub-menu === */}
-      {step === 'scope' && selectedAction && (
-        <div style={{ padding: 10, background: '#161b22', borderBottom: '1px solid #21262d', flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: '#7d8590', marginBottom: 8 }}>
-            <strong style={{ color: '#e6edf3' }}>{selectedAction.icon} {selectedAction.label}</strong> — choose scope:
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {Object.values(selectedAction.variants).map((variant) => {
+      <AnimatePresence mode="wait">
+        {/* ===== GRID VIEW: Square buttons ===== */}
+        {view === 'grid' && (
+          <motion.div
+            key="grid"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: 8, flex: 1, alignContent: 'start',
+            }}
+          >
+            {ACTIONS.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => handleClickAction(action)}
+                style={{
+                  ...glassBtn(),
+                  padding: '14px 10px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  textAlign: 'center',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.20)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+              >
+                <span style={{ fontSize: 22 }}>{action.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: 600 }}>{action.label}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+
+        {/* ===== EXPANDED: Scope options + custom ===== */}
+        {view === 'expanded' && selectedAction && (
+          <motion.div
+            key="expanded"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.15 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}
+          >
+            {/* Repo selector */}
+            {knownRepos.length > 0 && (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: t.text.muted, marginBottom: 4, fontWeight: 600 }}>Target Repo</div>
+                <select
+                  value={selectedRepo}
+                  onChange={(e) => setSelectedRepo(e.target.value)}
+                  style={{
+                    ...glassBtn(),
+                    width: '100%', padding: '6px 8px', fontSize: 11,
+                    fontFamily: t.font.mono, appearance: 'none',
+                    background: 'rgba(255,255,255,0.06)',
+                  }}
+                >
+                  {knownRepos.map((r) => (
+                    <option key={r} value={r} style={{ background: '#1a1926', color: '#f0f0f8' }}>
+                      {r.split('/').pop()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Preset scope options */}
+            {selectedAction.hasScopes && Object.values(selectedAction.variants).map((variant) => {
               if (!variant) return null;
               const isCurrent = variant.scope === 'current';
               return (
                 <button
                   key={variant.scope}
-                  onClick={() => handleSelectScope(variant)}
+                  onClick={() => handleSelectVariant(variant)}
                   disabled={isCurrent && !hasActiveTab}
                   style={{
-                    padding: '7px 10px',
-                    background: '#0d1117',
-                    border: '1px solid #21262d',
-                    borderRadius: 6,
-                    color: isCurrent && !hasActiveTab ? '#484f58' : '#c9d1d9',
-                    cursor: isCurrent && !hasActiveTab ? 'not-allowed' : 'pointer',
-                    fontSize: 12,
-                    textAlign: 'left',
-                    opacity: isCurrent && !hasActiveTab ? 0.5 : 1,
+                    ...glassBtn(),
+                    padding: '12px 14px', textAlign: 'left', width: '100%',
+                    opacity: isCurrent && !hasActiveTab ? 0.4 : 1,
                   }}
-                  onMouseEnter={(e) => { if (!(isCurrent && !hasActiveTab)) e.currentTarget.style.borderColor = '#30363d'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#21262d'; }}
+                  onMouseEnter={(e) => { if (!(isCurrent && !hasActiveTab)) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
                 >
-                  <div style={{ fontWeight: 500 }}>{variant.label}</div>
-                  <div style={{ fontSize: 9, color: '#484f58', marginTop: 1 }}>
-                    {isCurrent && !hasActiveTab ? 'Open a terminal first' : variant.description}
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{variant.label}</div>
+                  <div style={{ fontSize: 10, color: t.text.muted, marginTop: 2 }}>{variant.description}</div>
                 </button>
               );
             })}
-          </div>
-          <button onClick={reset} style={{ width: '100%', marginTop: 6, padding: 4, background: 'none', border: 'none', color: '#484f58', cursor: 'pointer', fontSize: 10 }}>
-            Cancel
-          </button>
-        </div>
-      )}
 
-      {/* === STEP: CLI selector (Claude / Codex / Current Terminal) === */}
-      {step === 'cli' && selectedAction && selectedVariant && (
-        <div style={{ padding: 10, background: '#161b22', borderBottom: '1px solid #21262d', flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: '#7d8590', marginBottom: 8 }}>
-            Launch <strong style={{ color: '#e6edf3' }}>{selectedVariant.label}</strong> with:
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {/* Current Terminal option */}
+            {/* If no scopes, show direct CLI select */}
+            {!selectedAction.hasScopes && (() => {
+              const variant = Object.values(selectedAction.variants)[0];
+              if (!variant) return null;
+              return (
+                <>
+                  <div style={{ fontSize: 10, color: t.text.muted, fontWeight: 600, marginTop: 4 }}>Choose AI</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <AgentButton agent="claude" onClick={() => { setSelectedVariant(variant); handleSelectAgent('claude'); }} />
+                    <AgentButton agent="codex" onClick={() => { setSelectedVariant(variant); handleSelectAgent('codex'); }} />
+                  </div>
+                  {hasActiveTab && (
+                    <button onClick={() => { onInjectCurrent(buildCurrentTerminalPrompt(variant)); reset(); }}
+                      style={{ ...glassBtn(), padding: '10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: t.accent.green }}>
+                      ▶ Run in Current Terminal
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Something specific — custom prompt */}
+            <div style={{ borderTop: `1px solid ${t.glass.border}`, paddingTop: 8, marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: t.text.muted, fontWeight: 600, marginBottom: 6 }}>Something Specific</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <AgentButton agent="claude" label="Custom Claude" onClick={() => handleCustomPrompt('claude')} />
+                <AgentButton agent="codex" label="Custom Codex" onClick={() => handleCustomPrompt('codex')} />
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ===== CLI SELECT (for scoped presets) ===== */}
+        {view === 'cli-select' && selectedVariant && (
+          <motion.div
+            key="cli-select"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.15 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}
+          >
+            <div style={{ fontSize: 12, color: t.text.secondary, lineHeight: 1.5 }}>
+              <strong style={{ color: t.text.primary }}>{selectedVariant.label}</strong>
+              <br /><span style={{ fontSize: 10 }}>{selectedVariant.description}</span>
+            </div>
+
+            <div style={{ fontSize: 10, color: t.text.muted, fontWeight: 600, marginTop: 4 }}>Launch with</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <AgentButton agent="claude" onClick={() => handleSelectAgent('claude')} />
+              <AgentButton agent="codex" onClick={() => handleSelectAgent('codex')} />
+            </div>
+
             {hasActiveTab && (
-              <button
-                onClick={() => {
-                  const prompt = buildCurrentTerminalPrompt(selectedVariant);
-                  onInjectCurrent(prompt);
-                  reset();
-                }}
-                style={{
-                  padding: '8px 12px', background: '#39d35310', border: '1px solid #39d35340',
-                  borderRadius: 6, color: '#39d353', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#39d35320'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = '#39d35310'; }}
-              >
-                <span style={{ fontSize: 13 }}>▶</span> Current Terminal
+              <button onClick={() => { onInjectCurrent(buildCurrentTerminalPrompt(selectedVariant)); reset(); }}
+                style={{ ...glassBtn(), padding: '10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: t.accent.green }}>
+                ▶ Run in Current Terminal
               </button>
             )}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => handleSelectCLI('claude')}
-                style={{
-                  flex: 1, padding: '8px 10px', background: '#da775612', border: '1px solid #da775640',
-                  borderRadius: 6, color: '#da7756', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#da775622'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = '#da775612'; }}
-              >
-                <span style={{ fontSize: 13 }}>✦</span> Claude
-              </button>
-              <button
-                onClick={() => handleSelectCLI('codex')}
-                style={{
-                  flex: 1, padding: '8px 10px', background: '#58a6ff12', border: '1px solid #58a6ff40',
-                  borderRadius: 6, color: '#58a6ff', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#58a6ff22'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = '#58a6ff12'; }}
-              >
-                <span style={{ fontSize: 13 }}>◈</span> Codex
-              </button>
-            </div>
-          </div>
-          <button onClick={reset} style={{ width: '100%', marginTop: 6, padding: 4, background: 'none', border: 'none', color: '#484f58', cursor: 'pointer', fontSize: 10 }}>
-            Cancel
-          </button>
-        </div>
-      )}
+          </motion.div>
+        )}
 
-      {/* === Action buttons grid === */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
-        {grouped.map((group) => (
-          <div key={group.category}>
-            <div style={{ fontSize: 9, color: '#484f58', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, padding: '8px 4px 4px' }}>
-              {group.label}
+        {/* ===== CUSTOM PROMPT ===== */}
+        {view === 'custom-prompt' && selectedAgent && (
+          <motion.div
+            key="custom-prompt"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.15 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700,
+                color: selectedAgent === 'claude' ? t.agent.claude : t.agent.codex,
+              }}>
+                {selectedAgent === 'claude' ? '✦ Claude' : '◈ Codex'}
+              </span>
+              {selectedRepo && (
+                <span style={{ fontSize: 10, color: t.text.muted }}>
+                  → {selectedRepo.split('/').pop()}
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {group.actions.map((action) => {
-                const isSelected = selectedAction?.id === action.id;
-                return (
-                  <button
-                    key={action.id}
-                    onClick={() => handleClickAction(action)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
-                      background: isSelected ? '#1f2937' : '#161b22',
-                      border: `1px solid ${isSelected ? '#58a6ff40' : '#21262d'}`,
-                      borderRadius: 6, color: '#c9d1d9', cursor: 'pointer', fontSize: 12,
-                      textAlign: 'left', width: '100%', transition: 'all 0.12s ease',
-                    }}
-                    onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.background = '#1c2129'; } }}
-                    onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.borderColor = '#21262d'; e.currentTarget.style.background = '#161b22'; } }}
-                  >
-                    <span style={{ fontSize: 14, flexShrink: 0 }}>{action.icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, fontSize: 12 }}>
-                        {action.label}
-                        {action.hasScopes && <span style={{ color: '#484f58', fontSize: 10, marginLeft: 4 }}>▾</span>}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+
+            {/* Repo selector */}
+            {knownRepos.length > 1 && (
+              <select
+                value={selectedRepo}
+                onChange={(e) => setSelectedRepo(e.target.value)}
+                style={{
+                  ...glassBtn(), width: '100%', padding: '6px 8px', fontSize: 11,
+                  fontFamily: t.font.mono, appearance: 'none',
+                  background: 'rgba(255,255,255,0.06)',
+                }}
+              >
+                {knownRepos.map((r) => (
+                  <option key={r} value={r} style={{ background: '#1a1926', color: '#f0f0f8' }}>
+                    {r.split('/').pop()}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Prompt textarea */}
+            <textarea
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="What do you want it to do?"
+              autoFocus
+              style={{
+                flex: 1, minHeight: 80,
+                background: 'rgba(255,255,255,0.04)',
+                backdropFilter: 'blur(8px)',
+                border: `1px solid ${t.glass.border}`,
+                borderRadius: t.radius.md,
+                color: t.text.primary,
+                fontSize: 12, lineHeight: 1.5,
+                padding: '10px 12px',
+                fontFamily: t.font.sans,
+                resize: 'none',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = t.accent.purple + '80'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = t.glass.border; }}
+            />
+
+            {/* Launch button */}
+            <button
+              onClick={handleLaunchCustom}
+              disabled={!customPrompt.trim()}
+              style={{
+                ...glassBtn(true),
+                padding: '12px',
+                textAlign: 'center',
+                fontSize: 13,
+                fontWeight: 700,
+                color: customPrompt.trim() ? t.text.primary : t.text.disabled,
+                background: customPrompt.trim()
+                  ? `linear-gradient(135deg, ${selectedAgent === 'claude' ? t.agent.claude + '30' : t.agent.codex + '30'}, rgba(255,255,255,0.08))`
+                  : 'rgba(255,255,255,0.04)',
+                opacity: customPrompt.trim() ? 1 : 0.5,
+              }}
+            >
+              Launch {selectedAgent === 'claude' ? '✦' : '◈'} →
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+function AgentButton({ agent, label, onClick }: { agent: AgentCLI; label?: string; onClick: () => void }) {
+  const isC = agent === 'claude';
+  const color = isC ? t.agent.claude : t.agent.codex;
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1, padding: '10px 8px',
+        background: `${color}12`,
+        backdropFilter: 'blur(8px)',
+        border: `1px solid ${color}35`,
+        borderRadius: t.radius.md,
+        boxShadow: `inset 0 1px 0 ${color}15`,
+        color,
+        cursor: 'pointer', fontSize: 12, fontWeight: 700,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+        transition: 'all 0.15s ease',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = `${color}22`; e.currentTarget.style.borderColor = `${color}50`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = `${color}12`; e.currentTarget.style.borderColor = `${color}35`; }}
+    >
+      <span style={{ fontSize: 14 }}>{isC ? '✦' : '◈'}</span>
+      {label || (isC ? 'Claude' : 'Codex')}
+    </button>
   );
 }
