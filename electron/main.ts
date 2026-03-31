@@ -4,6 +4,9 @@ import { startServer } from './server';
 import { registerIpcHandlers } from './ipc-handlers';
 import { PtyManager } from './pty-manager';
 import { SessionStore } from './session-store';
+import { AIClient } from './ai-client';
+import { MCPManager } from './mcp-manager';
+import { ConfigStore } from './config-store';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -49,8 +52,18 @@ function sendToRenderer(channel: string, ...args: any[]) {
 }
 
 app.whenReady().then(async () => {
+  const configStore = new ConfigStore();
   const sessionStore = new SessionStore();
   const ptyManager = new PtyManager();
+
+  // Initialize AI with persisted config
+  const savedApiKey = configStore.get('apiKey') || process.env.ANTHROPIC_API_KEY || '';
+  const savedModel = configStore.get('model');
+  const aiClient = new AIClient({
+    apiKey: savedApiKey,
+    model: savedModel || undefined,
+  });
+  const mcpManager = new MCPManager();
 
   // Forward PTY output to renderer (registered before window so no data is missed)
   ptyManager.onData((tabId, data) => {
@@ -66,8 +79,15 @@ app.whenReady().then(async () => {
     sendToRenderer('sidecar:event', event);
   });
 
-  // Register IPC handlers for terminal, sessions, etc.
-  registerIpcHandlers({ ptyManager, sessionStore });
+  // Register IPC handlers for terminal, sessions, AI, MCP, etc.
+  registerIpcHandlers({
+    ptyManager,
+    sessionStore,
+    aiClient,
+    mcpManager,
+    configStore,
+    getMainWindow: () => mainWindow,
+  });
 
   // Create the window last
   createWindow();

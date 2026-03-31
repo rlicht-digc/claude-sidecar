@@ -1,4 +1,4 @@
-import { useSidecarStore } from '../store/store';
+import { useSidecarStore, AppMode } from '../store/store';
 import { VscPulse, VscFolderOpened, VscSearch, VscUnmute, VscMute } from 'react-icons/vsc';
 import { useState } from 'react';
 
@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderProps) {
-  const { connected, workingDirectory, eventCount } = useSidecarStore();
+  const { connected, workingDirectory, eventCount, appMode, setAppMode } = useSidecarStore();
   const [scanInput, setScanInput] = useState('');
   const isMacElectron = typeof window !== 'undefined' && window.terminalSaddle?.platform === 'darwin';
 
@@ -127,6 +127,36 @@ export function Header({ onScan, loading, soundEnabled, onToggleSound }: HeaderP
       >
         {soundEnabled ? <VscUnmute style={{ fontSize: 16 }} /> : <VscMute style={{ fontSize: 16 }} />}
       </button>
+
+      {/* Mode toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        background: '#0d1117',
+        border: '1px solid #30363d',
+        borderRadius: 8,
+        padding: 2,
+        WebkitAppRegion: 'no-drag',
+      } as any}>
+        {(['dev', 'consumer'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setAppMode(mode)}
+            style={{
+              padding: '4px 10px',
+              fontSize: 11,
+              fontWeight: appMode === mode ? 600 : 400,
+              background: appMode === mode ? '#30363d' : 'transparent',
+              color: appMode === mode ? '#e6edf3' : '#7d8590',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {mode === 'dev' ? 'Dev' : 'Simple'}
+          </button>
+        ))}
+      </div>
 
       {/* Event counter */}
       <div style={{

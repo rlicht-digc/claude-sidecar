@@ -14,7 +14,11 @@ import { ActivityView } from './components/ActivityView';
 import { LiveActivity } from './components/LiveActivity';
 import { WorkspaceScene } from './components/visual/WorkspaceScene';
 import BotAvatar, { BotState, eventToBotState } from './components/visual/BotAvatar';
+import { AIBotAvatar } from './components/visual/AIBotAvatar';
 import { SessionCatalog } from './components/SessionCatalog';
+import { ChatPanel } from './components/ChatPanel';
+import { NarrativeView } from './components/NarrativeView';
+import { ConsumerSidebar } from './components/ConsumerSidebar';
 import { simplifyEvent } from './utils/simplify';
 import { theme as t, glassPanel } from './utils/theme';
 
@@ -22,7 +26,7 @@ const isElectron = !!window.terminalSaddle;
 
 export default function App() {
   useEventBridge();
-  const { fileTree, workingDirectory, setWorkingDirectory, setFileTree, activities } = useSidecarStore();
+  const { fileTree, workingDirectory, setWorkingDirectory, setFileTree, activities, appMode } = useSidecarStore();
   const [loading, setLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [tabs, setTabs] = useState<TabInfo[]>([]);
@@ -31,6 +35,7 @@ export default function App() {
   const [userName, setUserName] = useState<string>('');
 
   const [splitTabId, setSplitTabId] = useState<string | null>(null); // PBP second tab
+  const [rightPanelMode, setRightPanelMode] = useState<'visual' | 'chat'>('visual');
 
   // Panel widths
   const [leftWidth, setLeftWidth] = useState(280);
@@ -194,6 +199,82 @@ export default function App() {
   const effectiveLeftWidth = leftCollapsed ? 0 : leftWidth;
   const effectiveRightWidth = rightCollapsed ? 0 : rightWidth;
 
+  // ========== CONSUMER MODE ==========
+  if (isElectron && appMode === 'consumer') {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', height: '100vh',
+        background: t.bgGradient, color: t.text.primary, fontFamily: t.font.sans,
+      }}>
+        <Header onScan={handleScan} loading={loading} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
+
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '0 0 6px' }}>
+
+          {/* LEFT: Consumer sidebar (actions + project info) */}
+          <div style={{
+            width: 280, minWidth: 280, flexShrink: 0,
+            ...glassPanel(),
+            borderRadius: '0 16px 16px 0',
+            margin: '6px 0 0 6px',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <ConsumerSidebar
+              userName={userName}
+              onSetUserName={(name) => { setUserName(name); localStorage.setItem('saddle-username', name); }}
+              onSwitchToChat={() => setRightPanelMode('chat')}
+            />
+          </div>
+
+          {/* CENTER: Narrative view (plain English activity story) */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 300 }}>
+            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+              <NarrativeView />
+            </div>
+            <StatusBar />
+          </div>
+
+          {/* RIGHT: AI Chat (always visible in consumer mode) */}
+          <div style={{
+            width: 340, minWidth: 340, flexShrink: 0,
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            ...glassPanel(),
+            borderRadius: '16px 0 0 16px',
+            margin: '6px 6px 0 0',
+          }}>
+            {/* Small BotAvatar at top */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '12px 14px',
+              borderBottom: `1px solid ${t.glass.border}`,
+              flexShrink: 0,
+            }}>
+              <BotAvatar
+                state={activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
+                  ? eventToBotState(activities[0].type)
+                  : 'idle'}
+                size={36}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text.primary }}>AI Assistant</div>
+                <div style={{ fontSize: 10, color: t.text.muted }}>
+                  {activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
+                    ? 'Working...'
+                    : 'Ready to help'}
+                </div>
+              </div>
+            </div>
+
+            {/* Chat panel */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <ChatPanel />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== DEV MODE ==========
   if (isElectron) {
     return (
       <div style={{
@@ -405,7 +486,7 @@ export default function App() {
             onResize={setRightWidth} collapsed={rightCollapsed}
             onToggleCollapse={() => setRightCollapsed(!rightCollapsed)} />
 
-          {/* ========== RIGHT PANEL: 3 sections ========== */}
+          {/* ========== RIGHT PANEL: toggleable visual/chat ========== */}
           {!rightCollapsed && (
             <div style={{
               width: effectiveRightWidth, minWidth: effectiveRightWidth, flexShrink: 0,
@@ -414,56 +495,84 @@ export default function App() {
               borderRadius: '16px 0 0 16px',
               margin: '6px 6px 0 0',
             }}>
-              {/* TOP (~30%): File cabinet / workspace visualization */}
+              {/* Mode toggle tabs */}
               <div style={{
-                flex: 3, overflow: 'hidden',
-                borderBottom: `1px solid ${t.glass.border}`,
-                position: 'relative',
+                display: 'flex', borderBottom: `1px solid ${t.glass.border}`,
+                flexShrink: 0,
               }}>
-                {fileTree.length > 0 ? (
-                  <WorkspaceScene />
-                ) : (
+                {(['visual', 'chat'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setRightPanelMode(mode)}
+                    style={{
+                      flex: 1, padding: '10px 0',
+                      background: rightPanelMode === mode ? t.glass.bgActive : 'transparent',
+                      border: 'none',
+                      borderBottom: rightPanelMode === mode ? `2px solid ${t.accent.purple}` : '2px solid transparent',
+                      color: rightPanelMode === mode ? t.text.primary : t.text.muted,
+                      fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    <span>{mode === 'visual' ? '◈' : '✦'}</span>
+                    {mode === 'visual' ? 'Dashboard' : 'AI Chat'}
+                  </button>
+                ))}
+              </div>
+
+              {rightPanelMode === 'visual' ? (
+                <>
+                  {/* TOP (~30%): File cabinet / workspace visualization */}
                   <div style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    height: '100%', color: t.text.muted, fontSize: 11, gap: 6,
+                    flex: 3, overflow: 'hidden',
+                    borderBottom: `1px solid ${t.glass.border}`,
+                    position: 'relative',
                   }}>
-                    <span style={{ fontSize: 20, opacity: 0.2 }}>📁</span>
-                    <span>Scan a project to see files</span>
+                    {fileTree.length > 0 ? (
+                      <WorkspaceScene />
+                    ) : (
+                      <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        height: '100%', color: t.text.muted, fontSize: 11, gap: 6,
+                      }}>
+                        <span style={{ fontSize: 20, opacity: 0.2 }}>📁</span>
+                        <span>Scan a project to see files</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* MIDDLE (~40%): Action buttons */}
-              <div style={{
-                flex: 4, overflow: 'hidden',
-                borderBottom: `1px solid ${t.glass.border}`,
-              }}>
-                <ActionPanel
-                  onLaunchAgent={handleLaunchAgent}
-                  onInjectCurrent={handleInjectCurrent}
-                  hasActiveTab={!!activeTabId}
-                />
-              </div>
+                  {/* MIDDLE (~40%): Action buttons */}
+                  <div style={{
+                    flex: 4, overflow: 'hidden',
+                    borderBottom: `1px solid ${t.glass.border}`,
+                  }}>
+                    <ActionPanel
+                      onLaunchAgent={handleLaunchAgent}
+                      onInjectCurrent={handleInjectCurrent}
+                      hasActiveTab={!!activeTabId}
+                      onSwitchToChat={() => setRightPanelMode('chat')}
+                    />
+                  </div>
 
-              {/* BOTTOM (~30%): BotAvatar driven by live events */}
-              <div style={{
-                flex: 3, overflow: 'hidden',
-                background: t.glass.bg,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                padding: 8,
-              }}>
-                <BotAvatar
-                  state={activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
-                    ? eventToBotState(activities[0].type)
-                    : 'idle'}
-                  size={100}
-                />
-                <div style={{ fontSize: 10, color: t.text.muted, marginTop: 6, textAlign: 'center' }}>
-                  {activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
-                    ? simplifyEvent(activities[0].type, { path: activities[0].path })
-                    : 'Idle'}
+                  {/* BOTTOM (~30%): AI-powered BotAvatar with speech bubbles */}
+                  <div style={{
+                    flex: 3, overflow: 'hidden',
+                    background: t.glass.bg,
+                  }}>
+                    <AIBotAvatar
+                      size={100}
+                      onChatRequest={() => setRightPanelMode('chat')}
+                    />
+                  </div>
+                </>
+              ) : (
+                /* AI Chat mode — full height */
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <ChatPanel />
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

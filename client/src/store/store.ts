@@ -5,12 +5,23 @@ import { intelligence } from '../intelligence';
 
 let activityCounter = 0;
 
+// Wire AI teaching enrichment callback
+intelligence.setTeachingCallback((bubble) => {
+  useSidecarStore.setState({ teachingBubble: { text: bubble.text, conceptKey: bubble.conceptKey } });
+});
+
 interface HoverInfo {
   text: string;
   type: 'directory' | 'file' | 'activity' | 'tool';
 }
 
+export type AppMode = 'dev' | 'consumer';
+
 interface SidecarStore {
+  // App mode
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
+
   // Connection
   connected: boolean;
   setConnected: (connected: boolean) => void;
@@ -94,6 +105,12 @@ function getStatusForEvent(type: string): string {
 }
 
 export const useSidecarStore = create<SidecarStore>((set, get) => ({
+  appMode: (localStorage.getItem('saddle-app-mode') as AppMode) || 'dev',
+  setAppMode: (mode) => {
+    localStorage.setItem('saddle-app-mode', mode);
+    set({ appMode: mode });
+  },
+
   connected: false,
   setConnected: (connected) => set({ connected }),
 

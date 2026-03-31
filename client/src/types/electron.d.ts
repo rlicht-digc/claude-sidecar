@@ -20,6 +20,23 @@ export interface TerminalSaddleAPI {
     delete: (id: string) => Promise<void>;
     getTranscript: (id: string, options?: { tail?: number }) => Promise<string>;
   };
+  ai: {
+    configure: (config: { apiKey?: string; model?: string }) => Promise<{ model: string; hasApiKey: boolean }>;
+    getConfig: () => Promise<{ model: string; hasApiKey: boolean }>;
+    chat: (message: string, context?: { projectContext?: string; recentActivity?: string }) => Promise<{ ok: boolean; response?: string; error?: string }>;
+    stop: () => Promise<void>;
+    history: () => Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
+    clearHistory: () => Promise<void>;
+    explain: (prompt: string) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    onStream: (callback: (chunk: { type: string; text?: string; error?: string }) => void) => () => void;
+    onToolResult: (callback: (result: { toolName: string; result: string }) => void) => () => void;
+  };
+  mcp: {
+    connect: (config: { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<{ ok: boolean; servers?: any[]; error?: string }>;
+    disconnect: (name: string) => Promise<{ ok: boolean; servers: any[] }>;
+    listServers: () => Promise<Array<{ name: string; toolCount: number }>>;
+    listTools: () => Promise<Array<{ name: string; description: string }>>;
+  };
   system: {
     detectCLIs: () => Promise<Array<{ name: string; command: string; version: string; flag: string }>>;
   };

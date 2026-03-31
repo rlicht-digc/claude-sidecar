@@ -55,6 +55,46 @@ contextBridge.exposeInMainWorld('terminalSaddle', {
       ipcRenderer.invoke('sessions:getTranscript', id, options),
   },
 
+  // AI Chat
+  ai: {
+    configure: (config: { apiKey?: string; model?: string }) =>
+      ipcRenderer.invoke('ai:configure', config),
+    getConfig: () =>
+      ipcRenderer.invoke('ai:getConfig'),
+    chat: (message: string, context?: { projectContext?: string; recentActivity?: string }) =>
+      ipcRenderer.invoke('ai:chat', message, context),
+    stop: () =>
+      ipcRenderer.invoke('ai:stop'),
+    history: () =>
+      ipcRenderer.invoke('ai:history'),
+    clearHistory: () =>
+      ipcRenderer.invoke('ai:clearHistory'),
+    explain: (prompt: string) =>
+      ipcRenderer.invoke('ai:explain', prompt) as Promise<{ ok: boolean; text?: string; error?: string }>,
+    onStream: (callback: (chunk: any) => void) => {
+      const handler = (_: any, chunk: any) => callback(chunk);
+      ipcRenderer.on('ai:stream', handler);
+      return () => ipcRenderer.removeListener('ai:stream', handler);
+    },
+    onToolResult: (callback: (result: any) => void) => {
+      const handler = (_: any, result: any) => callback(result);
+      ipcRenderer.on('ai:toolResult', handler);
+      return () => ipcRenderer.removeListener('ai:toolResult', handler);
+    },
+  },
+
+  // MCP Server Management
+  mcp: {
+    connect: (config: { name: string; command: string; args?: string[]; env?: Record<string, string> }) =>
+      ipcRenderer.invoke('mcp:connect', config),
+    disconnect: (name: string) =>
+      ipcRenderer.invoke('mcp:disconnect', name),
+    listServers: () =>
+      ipcRenderer.invoke('mcp:listServers'),
+    listTools: () =>
+      ipcRenderer.invoke('mcp:listTools'),
+  },
+
   // System
   system: {
     detectCLIs: () => ipcRenderer.invoke('system:detectCLIs'),
@@ -86,6 +126,26 @@ export interface TerminalSaddleAPI {
     archive: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
     getTranscript: (id: string, options?: { tail?: number }) => Promise<string>;
+  };
+  ai: {
+    configure: (config: { apiKey?: string; model?: string }) => Promise<{ model: string; hasApiKey: boolean }>;
+    getConfig: () => Promise<{ model: string; hasApiKey: boolean }>;
+    chat: (message: string, context?: { projectContext?: string; recentActivity?: string }) => Promise<{ ok: boolean; response?: string; error?: string }>;
+    stop: () => Promise<void>;
+    history: () => Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
+    clearHistory: () => Promise<void>;
+    explain: (prompt: string) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    onStream: (callback: (chunk: { type: string; text?: string; error?: string }) => void) => () => void;
+    onToolResult: (callback: (result: { toolName: string; result: string }) => void) => () => void;
+  };
+  mcp: {
+    connect: (config: { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<{ ok: boolean; servers?: any[]; error?: string }>;
+    disconnect: (name: string) => Promise<{ ok: boolean; servers: any[] }>;
+    listServers: () => Promise<Array<{ name: string; toolCount: number }>>;
+    listTools: () => Promise<Array<{ name: string; description: string }>>;
+  };
+  system: {
+    detectCLIs: () => Promise<Array<{ name: string; command: string; version: string; flag: string }>>;
   };
   platform: string;
 }

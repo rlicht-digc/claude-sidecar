@@ -4,6 +4,7 @@ import { parseEvent } from './parser';
 import { SequenceDetector } from './sequences';
 import { KnowledgeDictionary } from './dictionary';
 import { TeachingAssistant } from './teaching';
+import { AITeachingAssistant } from './ai-teaching';
 
 export interface EnrichedResult {
   parsed: ParsedEvent;
@@ -16,7 +17,14 @@ export interface EnrichedResult {
 class IntelligenceLayer {
   private sequenceDetector = new SequenceDetector();
   private dictionary = new KnowledgeDictionary();
-  private teachingAssistant = new TeachingAssistant(this.dictionary);
+  private staticTeacher = new TeachingAssistant(this.dictionary);
+  private aiTeacher = new AITeachingAssistant();
+  private onTeachingEnriched: ((bubble: TeachingBubble) => void) | null = null;
+
+  /** Register a callback for when AI enriches a teaching bubble */
+  setTeachingCallback(cb: (bubble: TeachingBubble) => void) {
+    this.onTeachingEnriched = cb;
+  }
 
   /** Process a single event through all 4 systems. Synchronous, ~3ms. */
   process(event: SidecarEvent): EnrichedResult {
@@ -34,8 +42,15 @@ class IntelligenceLayer {
       }
     }
 
-    // System 4: Teaching assistant
-    const teaching = this.teachingAssistant.evaluate(parsed, sequence);
+    // System 4: Teaching assistant (AI-enhanced with static fallback)
+    let teaching: TeachingBubble | null = null;
+    const hasAI = !!window.terminalSaddle?.ai;
+
+    if (hasAI) {
+      teaching = this.aiTeacher.evaluate(parsed, sequence, this.onTeachingEnriched || undefined);
+    } else {
+      teaching = this.staticTeacher.evaluate(parsed, sequence);
+    }
 
     return {
       parsed,
@@ -53,7 +68,8 @@ class IntelligenceLayer {
 
   /** Dismiss a teaching concept permanently */
   dismissConcept(key: string) {
-    this.teachingAssistant.dismissConcept(key);
+    this.staticTeacher.dismissConcept(key);
+    this.aiTeacher.dismissConcept(key);
   }
 
   /** Get dictionary for external use */

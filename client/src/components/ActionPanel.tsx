@@ -14,14 +14,16 @@ interface ActionPanelProps {
   onLaunchAgent: (command: string, label: string, agent: 'claude' | 'codex') => void;
   onInjectCurrent: (prompt: string) => void;
   hasActiveTab: boolean;
+  onSwitchToChat?: (prompt?: string) => void;
 }
 
 type View = 'home' | 'cli-select' | 'repo-select' | 'options' | 'custom-prompt';
-type Workflow = 'work' | 'review' | 'look';
+type Workflow = 'ask' | 'work' | 'review' | 'look';
 
 const QUALITY_GATE = 'Use only official documentation, peer-reviewed sources, and institutional references. Do not cite Reddit, unverified blog posts, or Stack Overflow answers without primary source verification.';
 
 const WORKFLOWS = {
+  ask: { icon: '✦', label: 'Ask AI', desc: 'Chat with your AI assistant' },
   work: { icon: '🚀', label: 'Get To Work', desc: 'Describe a task and launch' },
   review: { icon: '🔬', label: 'Review & Research', desc: 'Audit, debug, or explore alternatives' },
   look: { icon: '📊', label: 'Quick Look', desc: 'Lightweight read-only overview' },
@@ -41,7 +43,7 @@ const LOOK_OPTIONS = [
   { id: 'readme', label: 'README Summary', desc: 'What does this project do?', prompt: 'Read the README and give me a 3-sentence summary of what this project does, how to set it up, and its current status.' },
 ];
 
-export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: ActionPanelProps) {
+export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab, onSwitchToChat }: ActionPanelProps) {
   const [view, setView] = useState<View>('home');
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [clis, setClis] = useState<DetectedCLI[]>([]);
@@ -95,6 +97,10 @@ export function ActionPanel({ onLaunchAgent, onInjectCurrent, hasActiveTab }: Ac
   };
 
   const handleWorkflow = (wf: Workflow) => {
+    if (wf === 'ask') {
+      onSwitchToChat?.();
+      return;
+    }
     setWorkflow(wf);
     setSelectedRepo(workingDirectory || '');
     if (wf === 'look') {
