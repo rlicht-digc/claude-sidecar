@@ -19,6 +19,7 @@ import { SessionCatalog } from './components/SessionCatalog';
 import { ChatPanel } from './components/ChatPanel';
 import { NarrativeView } from './components/NarrativeView';
 import { ConsumerSidebar } from './components/ConsumerSidebar';
+import { SessionDashboard } from './components/dashboard/SessionDashboard';
 import { simplifyEvent } from './utils/simplify';
 import { theme as t, glassPanel } from './utils/theme';
 
@@ -210,9 +211,9 @@ export default function App() {
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '0 0 6px' }}>
 
-          {/* LEFT: Consumer sidebar (actions + project info) */}
+          {/* LEFT: Consumer sidebar — sessions list + quick actions */}
           <div style={{
-            width: 280, minWidth: 280, flexShrink: 0,
+            width: 260, minWidth: 260, flexShrink: 0,
             ...glassPanel(),
             borderRadius: '0 16px 16px 0',
             margin: '6px 0 0 6px',
@@ -222,51 +223,86 @@ export default function App() {
               userName={userName}
               onSetUserName={(name) => { setUserName(name); localStorage.setItem('saddle-username', name); }}
               onSwitchToChat={() => setRightPanelMode('chat')}
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              onNewTab={handleNewTab}
             />
           </div>
 
-          {/* CENTER: Narrative view (plain English activity story) */}
+          {/* CENTER: Session dashboard */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 300 }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-              <NarrativeView />
+              {rightPanelMode === 'chat' ? (
+                /* Full-screen chat when user switches to chat mode */
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 12 }}>
+                  <button
+                    onClick={() => setRightPanelMode('visual')}
+                    style={{
+                      alignSelf: 'flex-start', marginBottom: 8,
+                      padding: '5px 12px', fontSize: 11,
+                      background: t.glass.bg, border: `1px solid ${t.glass.border}`,
+                      borderRadius: t.radius.sm, color: t.text.secondary,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Dashboard
+                  </button>
+                  <div style={{ flex: 1, overflow: 'hidden', ...glassPanel(), borderRadius: t.radius.lg }}>
+                    <ChatPanel />
+                  </div>
+                </div>
+              ) : (
+                <SessionDashboard
+                  tabs={tabs}
+                  activeTabId={activeTabId}
+                  onSelectTab={setActiveTabId}
+                />
+              )}
             </div>
             <StatusBar />
           </div>
 
-          {/* RIGHT: AI Chat (always visible in consumer mode) */}
+          {/* RIGHT: Bot stage — animated assistant + embedded chat + tone selector */}
           <div style={{
-            width: 340, minWidth: 340, flexShrink: 0,
+            width: 300, minWidth: 300, flexShrink: 0,
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
             ...glassPanel(),
             borderRadius: '16px 0 0 16px',
             margin: '6px 6px 0 0',
           }}>
-            {/* Small BotAvatar at top */}
+            {/* Header */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '12px 14px',
+              padding: '10px 14px 8px',
               borderBottom: `1px solid ${t.glass.border}`,
               flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              <BotAvatar
-                state={activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
-                  ? eventToBotState(activities[0].type)
-                  : 'idle'}
-                size={36}
-              />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text.primary }}>AI Assistant</div>
-                <div style={{ fontSize: 10, color: t.text.muted }}>
-                  {activities.length > 0 && (Date.now() - activities[0].timestamp) < 5000
-                    ? 'Working...'
-                    : 'Ready to help'}
-                </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.text.primary }}>
+                AI Assistant
               </div>
+              <button
+                onClick={() => setRightPanelMode(rightPanelMode === 'chat' ? 'visual' : 'chat')}
+                style={{
+                  padding: '3px 8px', fontSize: 10,
+                  background: t.glass.bg, border: `1px solid ${t.glass.border}`,
+                  borderRadius: t.radius.sm, color: t.text.muted,
+                  cursor: 'pointer',
+                }}
+                title="Open full chat"
+              >
+                Full chat
+              </button>
             </div>
 
-            {/* Chat panel */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <ChatPanel />
+            {/* Bot stage */}
+            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <AIBotAvatar
+                size={110}
+                onChatRequest={() => setRightPanelMode('chat')}
+                showChatInput={true}
+                showToneSelector={true}
+              />
             </div>
           </div>
         </div>

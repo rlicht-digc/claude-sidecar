@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FileTreeNode, SidecarEvent, ActivityItem } from '../types';
+import { FileTreeNode, SidecarEvent, ActivityItem, EventType } from '../types';
 import { getEventColor } from '../utils/colors';
 import { intelligence } from '../intelligence';
 
@@ -9,6 +9,18 @@ let activityCounter = 0;
 intelligence.setTeachingCallback((bubble) => {
   useSidecarStore.setState({ teachingBubble: { text: bubble.text, conceptKey: bubble.conceptKey } });
 });
+
+export type ToneMode = 'executive' | 'friendly' | 'technical';
+
+export interface SessionSummary {
+  sessionId: string;
+  lastEventType: EventType;
+  lastActivity: string;
+  narrative: string | null;
+  phase: string;
+  lastTimestamp: number;
+  eventCount: number;
+}
 
 interface HoverInfo {
   text: string;
@@ -57,6 +69,17 @@ interface SidecarStore {
   currentPhase: string;
   teachingBubble: { text: string; conceptKey: string } | null;
   dismissTeaching: (key: string) => void;
+
+  // Per-session summaries (keyed by session_id from hook events)
+  sessionSummaries: Record<string, SessionSummary>;
+
+  // Which session card the user is hovering (for bot stage narration)
+  hoveredSessionId: string | null;
+  setHoveredSessionId: (id: string | null) => void;
+
+  // Tone mode for bot speech and activity descriptions
+  toneMode: ToneMode;
+  setToneMode: (mode: ToneMode) => void;
 
   // Process incoming event
   processEvent: (event: SidecarEvent) => void;
@@ -153,6 +176,15 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
     set({ teachingBubble: null });
   },
 
+  sessionSummaries: {},
+  hoveredSessionId: null,
+  setHoveredSessionId: (id) => set({ hoveredSessionId: id }),
+  toneMode: (localStorage.getItem('saddle-tone-mode') as ToneMode) || 'executive',
+  setToneMode: (mode) => {
+    localStorage.setItem('saddle-tone-mode', mode);
+    set({ toneMode: mode });
+  },
+
   processEvent: (event) => {
     // Run through intelligence layer
     const enriched = intelligence.process(event);
@@ -171,6 +203,7 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
     };
 
     const filePath = event.data?.path;
+    const sessionId = event.session_id;
 
     set((state) => {
       const newActivePaths = { ...state.activePaths };
@@ -207,6 +240,24 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
         }
       }
 
+      // Per-session summary update
+      let sessionSummaries = state.sessionSummaries;
+      if (sessionId) {
+        const existing = state.sessionSummaries[sessionId];
+        sessionSummaries = {
+          ...sessionSummaries,
+          [sessionId]: {
+            sessionId,
+            lastEventType: event.type,
+            lastActivity: enriched.parsed.summary || message,
+            narrative: enriched.narrative,
+            phase: enriched.phase,
+            lastTimestamp: event.timestamp,
+            eventCount: (existing?.eventCount || 0) + 1,
+          },
+        };
+      }
+
       return {
         activities: [activity, ...state.activities].slice(0, 200),
         eventCount: state.eventCount + 1,
@@ -215,6 +266,7 @@ export const useSidecarStore = create<SidecarStore>((set, get) => ({
         currentNarrative: enriched.narrative,
         currentPhase: enriched.phase,
         teachingBubble: enriched.teaching ? { text: enriched.teaching.text, conceptKey: enriched.teaching.conceptKey } : state.teachingBubble,
+        sessionSummaries,
       };
     });
   },
